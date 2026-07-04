@@ -6,7 +6,7 @@ Generates realistic t-shirt mockups using exact Photoshop warp data.
 
 ```
 mockup_site/
-├── server.py            ← FastAPI server
+├── server.py            ← FastAPI   server
 ├── requirements.txt
 ├── static/
 │   └── index.html       ← Frontend
