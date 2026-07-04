@@ -1,5 +1,11 @@
 """
 Mockup API Server
+=================
+FastAPI server that applies a user's design to a t-shirt mockup.
+
+Run:
+    pip install fastapi uvicorn pillow scipy opencv-python numpy python-multipart
+    uvicorn server:app --host 0.0.0.0 --port 8000
 """
 
 import io
@@ -10,7 +16,7 @@ import cv2
 from PIL import Image
 from scipy.interpolate import griddata
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Load mockup package on startup ──────────────────────────────────────────
 MOCKUP_DIR = os.path.join(os.path.dirname(__file__), "mockup_package")
 
 BLEND_FNS = {
@@ -46,11 +53,8 @@ class MockupEngine:
         self.canvas_w = pkg["canvas"]["width"]
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
-
-        # Используем ВСЮ зону варпа — полная футболка
-        src_w = warp["bounds"]["right"]
-        src_h = warp["bounds"]["bottom"]
-        self.print_zone = {"x0": 0, "y0": 0, "x1": int(src_w), "y1": int(src_h)}
+        pz   = pkg["print_zone"]
+        self.print_zone = pz
 
         self.shirt_arr = (np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png"))
                           .convert("RGB")).astype(np.float32) / 255)
@@ -63,6 +67,9 @@ class MockupEngine:
                    .convert("RGB")).astype(np.float32) / 255)
             self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
 
+        # Warp setup
+        src_w = warp["bounds"]["right"]
+        src_h = warp["bounds"]["bottom"]
         self.src_w = src_w
         self.src_h = src_h
         tx = warp["transform"]
@@ -78,6 +85,7 @@ class MockupEngine:
         my = np.array(warp["mesh_y"]).reshape(4,4)
         displaced = np.column_stack([mx.ravel(), my.ravel()])
 
+        # Precompute inverse warp (done once at startup)
         print("Precomputing warp map...")
         cw, ch = self.canvas_w, self.canvas_h
         ys, xs = np.mgrid[0:ch, 0:cw]
@@ -100,11 +108,13 @@ class MockupEngine:
         pw = pz["x1"] - pz["x0"]
         ph = pz["y1"] - pz["y0"]
 
+        # Place design in source canvas at print zone
         src_canvas = Image.new("RGBA", (int(self.src_w), int(self.src_h)), (0,0,0,0))
         src_canvas.paste(design_img.resize((pw, ph), Image.LANCZOS), (pz["x0"], pz["y0"]))
         dw, dh = src_canvas.size
         design_arr = np.array(src_canvas).astype(np.float32)
 
+        # Sample design at precomputed coordinates
         nx = self._rx / self.src_w * dw
         ny = self._ry / self.src_h * dh
         valid = ((~np.isnan(nx)) & (~np.isnan(ny)) &
@@ -116,12 +126,15 @@ class MockupEngine:
         warped[fi//self.canvas_w, fi%self.canvas_w] = design_arr[
             ny[valid].astype(int), nx[valid].astype(int)]
 
+        # Apply mask
         warped[:,:,3] = warped[:,:,3] * self.mask_arr
 
+        # Multiply blend
         alpha      = warped[:,:,3:4] / 255
         design_rgb = warped[:,:,:3]  / 255
         result     = self.shirt_arr * (1-alpha) + self.shirt_arr * design_rgb * alpha
 
+        # Overlay layers
         for img, opacity, blend_mode in self.overlays:
             fn = BLEND_FNS.get(blend_mode)
             if fn:
@@ -130,11 +143,14 @@ class MockupEngine:
         return Image.fromarray((np.clip(result, 0, 1) * 255).astype(np.uint8))
 
 
+# Load engine at startup
 engine = MockupEngine(MOCKUP_DIR)
 
 
+# ── Routes ───────────────────────────────────────────────────────────────────
 @app.post("/render")
 async def render_mockup(file: UploadFile = File(...)):
+    """Accept a PNG/JPG design, return a rendered mockup PNG."""
     if not file.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image")
 
@@ -165,4 +181,5 @@ def health():
     return {"status": "ok", "canvas": f"{engine.canvas_w}x{engine.canvas_h}"}
 
 
-app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
+# Serve frontend
+app.mount("/", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static"), html=True), name="static")
