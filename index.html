@@ -6,282 +6,206 @@
   <title>Mockup Generator</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #111;
-      --surface: #1c1c1c;
-      --border: #2e2e2e;
-      --accent: #e8ff47;
-      --text: #f0f0f0;
-      --muted: #555;
+      --bg: #0f0f0f; --surface: #1a1a1a; --border: #2a2a2a;
+      --accent: #e8ff47; --text: #f0f0f0; --muted: #555;
     }
-
     body {
-      background: var(--bg);
-      color: var(--text);
+      background: var(--bg); color: var(--text);
       font-family: system-ui, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 32px 16px;
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; padding: 32px 16px; gap: 24px;
     }
-
-    h1 {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      margin-bottom: 6px;
-    }
+    header { text-align: center; }
+    h1 { font-size: 30px; font-weight: 700; letter-spacing: -1px; }
     h1 span { color: var(--accent); }
-    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+    .sub { color: var(--muted); font-size: 14px; margin-top: 4px; }
 
-    .workspace {
-      display: flex;
-      gap: 24px;
-      width: 100%;
-      max-width: 1000px;
+    .main {
+      display: flex; gap: 28px; width: 100%; max-width: 1060px;
       align-items: flex-start;
     }
 
-    /* LEFT PANEL — editor */
-    .editor-panel {
+    /* ── EDITOR ── */
+    .editor {
       flex: 0 0 auto;
       position: relative;
-      width: 400px;
+      width: 460px;
     }
 
-    .canvas-wrap {
-      position: relative;
-      width: 400px;
-      height: 600px;
-      border-radius: 12px;
-      overflow: hidden;
-      background: #222;
-      cursor: default;
-    }
-
-    #shirtImg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      pointer-events: none;
-      user-select: none;
-    }
-
-    #designLayer {
-      position: absolute;
-      cursor: move;
-      user-select: none;
-      touch-action: none;
-      transform-origin: center center;
-    }
-
-    #designLayer img {
-      width: 100%;
-      height: 100%;
+    /* The shirt preview image */
+    #shirtPreview {
+      width: 460px;
+      height: auto;
       display: block;
-      pointer-events: none;
-    }
-
-    .resize-handle {
-      position: absolute;
-      bottom: -6px;
-      right: -6px;
-      width: 16px;
-      height: 16px;
-      background: var(--accent);
-      border-radius: 3px;
-      cursor: se-resize;
-    }
-
-    .design-border {
-      position: absolute;
-      inset: 0;
-      border: 2px solid var(--accent);
-      pointer-events: none;
-    }
-
-    /* RIGHT PANEL */
-    .right-panel {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
       border-radius: 12px;
-      overflow: hidden;
     }
 
-    .panel-label {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 1.5px;
-      text-transform: uppercase;
-      color: var(--muted);
+    /* Design overlay — sits on top of shirt, clipped to shirt bounds */
+    #overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 460px;
+      height: 100%;
+      pointer-events: none;
     }
 
-    .panel-body { padding: 16px; }
-
-    .dropzone {
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      padding: 28px 16px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s;
-      position: relative;
+    /* Draggable design box */
+    #designBox {
+      position: absolute;
+      display: none;
+      cursor: move;
+      pointer-events: all;
     }
-    .dropzone:hover { border-color: var(--accent); }
-    .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-    .dropzone-icon { font-size: 28px; display: block; margin-bottom: 8px; }
-    .dropzone-text { font-size: 13px; color: var(--muted); }
-    .dropzone-text strong { color: var(--accent); }
-
-    .controls { display: flex; flex-direction: column; gap: 12px; }
-
-    .slider-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
-    .slider-row label { width: 60px; }
-    .slider-row input[type=range] {
-      flex: 1;
-      accent-color: var(--accent);
+    #designBox img {
+      width: 100%; height: 100%;
+      display: block; pointer-events: none;
+      mix-blend-mode: multiply;
     }
-    .slider-row span { width: 36px; text-align: right; font-size: 12px; color: var(--text); }
+    #designBox .border {
+      position: absolute; inset: 0;
+      border: 2px dashed var(--accent);
+      pointer-events: none;
+    }
+    #designBox .handle {
+      position: absolute; bottom: -7px; right: -7px;
+      width: 16px; height: 16px;
+      background: var(--accent); border-radius: 3px;
+      cursor: se-resize; pointer-events: all;
+    }
 
+    /* ── SIDEBAR ── */
+    .sidebar { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden;
+    }
+    .card-title {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--muted);
+    }
+    .card-body { padding: 16px; }
+
+    /* Upload */
+    .drop {
+      border: 2px dashed var(--border); border-radius: 8px;
+      padding: 24px 12px; text-align: center; cursor: pointer;
+      transition: border-color .2s; position: relative;
+    }
+    .drop:hover { border-color: var(--accent); }
+    .drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .drop-icon { font-size: 26px; display: block; margin-bottom: 6px; }
+    .drop-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .drop-text strong { color: var(--accent); }
+
+    /* Sliders */
+    .sliders { display: flex; flex-direction: column; gap: 10px; }
+    .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+    .row label { width: 52px; color: var(--muted); }
+    .row input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; }
+    .row span { width: 32px; text-align: right; font-size: 12px; }
+
+    /* Buttons */
     .btn {
-      width: 100%;
-      padding: 13px;
-      background: var(--accent);
-      color: #111;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: opacity 0.2s;
+      width: 100%; padding: 13px; background: var(--accent);
+      color: #111; border: none; border-radius: 8px;
+      font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .2s;
     }
-    .btn:hover:not(:disabled) { opacity: 0.85; }
-    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn:disabled { opacity: .3; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { opacity: .85; }
 
-    .result-img {
-      width: 100%;
-      border-radius: 8px;
-      display: none;
+    .dl {
+      display: none; width: 100%; margin-top: 10px; padding: 11px;
+      background: transparent; color: var(--accent);
+      border: 1px solid var(--accent); border-radius: 8px;
+      font-size: 13px; font-weight: 600; text-align: center;
+      text-decoration: none; cursor: pointer;
     }
-    .result-img.visible { display: block; }
+    .dl.show { display: block; }
 
-    .download-btn {
-      display: none;
-      width: 100%;
-      margin-top: 12px;
-      padding: 11px;
-      background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--accent);
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      text-align: center;
-      text-decoration: none;
-    }
-    .download-btn.visible { display: block; }
+    /* Result */
+    #resultImg { width: 100%; border-radius: 8px; display: none; margin-top: 4px; }
+    #resultImg.show { display: block; }
 
-    .status { margin-top: 8px; font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
-    .status.error { color: #ff6b6b; }
-    .status.loading { color: var(--accent); }
-
+    .status { margin-top: 8px; font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; }
+    .status.err { color: #f66; }
+    .status.ok  { color: var(--accent); }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner {
-      display: inline-block; width: 12px; height: 12px;
-      border: 2px solid rgba(232,255,71,0.3);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle; margin-right: 5px;
-    }
-
-    @media (max-width: 700px) {
-      .workspace { flex-direction: column; align-items: center; }
-      .editor-panel { width: 100%; }
-      .canvas-wrap { width: 100%; height: auto; aspect-ratio: 2/3; }
+    .spin {
+      display: inline-block; width: 11px; height: 11px;
+      border: 2px solid rgba(232,255,71,.3); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .7s linear infinite;
+      vertical-align: middle; margin-right: 4px;
     }
   </style>
 </head>
 <body>
 
-<h1>T-Shirt <span>Mockup</span></h1>
-<p class="subtitle">Position your design on the shirt, then generate</p>
+<header>
+  <h1>T-Shirt <span>Mockup</span></h1>
+  <p class="sub">Drag your design onto the shirt, then generate</p>
+</header>
 
-<div class="workspace">
+<div class="main">
 
-  <!-- Editor canvas -->
-  <div class="editor-panel">
-    <div class="canvas-wrap" id="canvasWrap">
-      <img id="shirtImg" src="/shirt_preview.png" alt="shirt">
-      <div id="designLayer" style="display:none; left:100px; top:80px; width:200px; height:200px;">
-        <div class="design-border"></div>
-        <img id="designImg" src="" alt="design">
-        <div class="resize-handle" id="resizeHandle"></div>
+  <!-- Editor -->
+  <div class="editor" id="editor">
+    <img id="shirtPreview" src="/shirt_preview.png" alt="shirt" draggable="false">
+    <div id="overlay">
+      <div id="designBox">
+        <img id="designImg" src="" alt="" draggable="false">
+        <div class="border"></div>
+        <div class="handle" id="resizeHandle"></div>
       </div>
     </div>
   </div>
 
-  <!-- Right panel -->
-  <div class="right-panel">
+  <!-- Sidebar -->
+  <div class="sidebar">
 
-    <!-- Upload -->
-    <div class="panel">
-      <div class="panel-label">Upload Design</div>
-      <div class="panel-body">
-        <div class="dropzone" id="dropzone">
+    <div class="card">
+      <div class="card-title">Upload Design</div>
+      <div class="card-body">
+        <div class="drop" id="drop">
           <input type="file" id="fileInput" accept="image/*">
-          <span class="dropzone-icon">🖼️</span>
-          <div class="dropzone-text"><strong>Click to upload</strong> or drag & drop<br>PNG, JPG — transparent background works best</div>
+          <span class="drop-icon">🎨</span>
+          <div class="drop-text"><strong>Click to upload</strong> or drag & drop<br>PNG with transparency works best</div>
         </div>
       </div>
     </div>
 
-    <!-- Controls -->
-    <div class="panel" id="controlsPanel" style="display:none">
-      <div class="panel-label">Adjust</div>
-      <div class="panel-body">
-        <div class="controls">
-          <div class="slider-row">
+    <div class="card" id="adjustCard" style="display:none">
+      <div class="card-title">Adjust</div>
+      <div class="card-body">
+        <div class="sliders">
+          <div class="row">
             <label>Size</label>
-            <input type="range" id="sizeSlider" min="50" max="380" value="200">
-            <span id="sizeVal">200</span>
+            <input type="range" id="sSize" min="40" max="320" value="160">
+            <span id="vSize">160</span>
           </div>
-          <div class="slider-row">
-            <label>X pos</label>
-            <input type="range" id="xSlider" min="0" max="350" value="100">
-            <span id="xVal">100</span>
+          <div class="row">
+            <label>X</label>
+            <input type="range" id="sX" min="0" max="400" value="100">
+            <span id="vX">100</span>
           </div>
-          <div class="slider-row">
-            <label>Y pos</label>
-            <input type="range" id="ySlider" min="0" max="520" value="80">
-            <span id="yVal">80</span>
+          <div class="row">
+            <label>Y</label>
+            <input type="range" id="sY" min="0" max="600" value="120">
+            <span id="vY">120</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Generate -->
-    <div class="panel">
-      <div class="panel-label">Result</div>
-      <div class="panel-body">
+    <div class="card">
+      <div class="card-title">Result</div>
+      <div class="card-body">
         <button class="btn" id="renderBtn" disabled>Generate Mockup →</button>
         <div class="status" id="status"></div>
-        <img class="result-img" id="resultImg" alt="mockup">
-        <a class="download-btn" id="downloadBtn" download="mockup.png">↓ Download PNG</a>
+        <img id="resultImg" alt="mockup result">
+        <a class="dl" id="dlBtn" download="mockup.png">↓ Download PNG</a>
       </div>
     </div>
 
@@ -289,139 +213,130 @@
 </div>
 
 <script>
-  const fileInput    = document.getElementById('fileInput');
-  const dropzone     = document.getElementById('dropzone');
-  const designLayer  = document.getElementById('designLayer');
-  const designImg    = document.getElementById('designImg');
-  const canvasWrap   = document.getElementById('canvasWrap');
-  const renderBtn    = document.getElementById('renderBtn');
-  const status       = document.getElementById('status');
-  const resultImg    = document.getElementById('resultImg');
-  const downloadBtn  = document.getElementById('downloadBtn');
-  const controlsPanel = document.getElementById('controlsPanel');
-  const sizeSlider   = document.getElementById('sizeSlider');
-  const xSlider      = document.getElementById('xSlider');
-  const ySlider      = document.getElementById('ySlider');
-  const sizeVal      = document.getElementById('sizeVal');
-  const xVal         = document.getElementById('xVal');
-  const yVal         = document.getElementById('yVal');
-  const resizeHandle = document.getElementById('resizeHandle');
+  // ── State ──────────────────────────────────────────────────────────────────
+  let file = null;
 
-  let selectedFile = null;
+  const editor      = document.getElementById('editor');
+  const shirtPreview= document.getElementById('shirtPreview');
+  const designBox   = document.getElementById('designBox');
+  const designImg   = document.getElementById('designImg');
+  const resizeHandle= document.getElementById('resizeHandle');
+  const renderBtn   = document.getElementById('renderBtn');
+  const status      = document.getElementById('status');
+  const resultImg   = document.getElementById('resultImg');
+  const dlBtn       = document.getElementById('dlBtn');
+  const adjustCard  = document.getElementById('adjustCard');
 
-  // Canvas size constants (shirt is 1334x2000, preview is 400x600)
-  const CANVAS_W = 400, CANVAS_H = 600;
+  const sSize = document.getElementById('sSize'), vSize = document.getElementById('vSize');
+  const sX    = document.getElementById('sX'),    vX   = document.getElementById('vX');
+  const sY    = document.getElementById('sY'),    vY   = document.getElementById('vY');
+
+  // Preview dimensions (scaled)
+  // Shirt is 600x900 in shirt_preview.png
+  // We display it at 460px wide → height = 460/600 * 900 = 690
+  const PREVIEW_W = 460;
+  let   PREVIEW_H = 690; // updated after image loads
+
+  // Actual shirt canvas size
   const SHIRT_W = 1334, SHIRT_H = 2000;
-  const SCALE_X = SHIRT_W / CANVAS_W;
-  const SCALE_Y = SHIRT_H / CANVAS_H;
 
-  // Upload
-  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
-  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; });
-  dropzone.addEventListener('dragleave', () => dropzone.style.borderColor = '');
-  dropzone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropzone.style.borderColor = '';
-    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  shirtPreview.addEventListener('load', () => {
+    PREVIEW_H = shirtPreview.offsetHeight;
+    document.getElementById('overlay').style.height = PREVIEW_H + 'px';
+    sY.max = PREVIEW_H - 40;
   });
 
-  function handleFile(file) {
-    selectedFile = file;
-    designImg.src = URL.createObjectURL(file);
-    designLayer.style.display = 'block';
-    controlsPanel.style.display = 'block';
+  // ── Upload ─────────────────────────────────────────────────────────────────
+  document.getElementById('fileInput').addEventListener('change', e => {
+    if (e.target.files[0]) load(e.target.files[0]);
+  });
+  const drop = document.getElementById('drop');
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.style.borderColor='var(--accent)'; });
+  drop.addEventListener('dragleave', () => drop.style.borderColor='');
+  drop.addEventListener('drop', e => {
+    e.preventDefault(); drop.style.borderColor='';
+    if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+
+  function load(f) {
+    file = f;
+    designImg.src = URL.createObjectURL(f);
+    designBox.style.display = 'block';
+    adjustCard.style.display = 'block';
     renderBtn.disabled = false;
-    updatePosition();
+    applyPos();
   }
 
-  // Sliders
-  sizeSlider.addEventListener('input', () => { sizeVal.textContent = sizeSlider.value; updatePosition(); });
-  xSlider.addEventListener('input', () => { xVal.textContent = xSlider.value; updatePosition(); });
-  ySlider.addEventListener('input', () => { yVal.textContent = ySlider.value; updatePosition(); });
-
-  function updatePosition() {
-    const s = parseInt(sizeSlider.value);
-    const x = parseInt(xSlider.value);
-    const y = parseInt(ySlider.value);
-    designLayer.style.width  = s + 'px';
-    designLayer.style.height = s + 'px';
-    designLayer.style.left   = x + 'px';
-    designLayer.style.top    = y + 'px';
+  // ── Position helpers ───────────────────────────────────────────────────────
+  function applyPos() {
+    const s = +sSize.value, x = +sX.value, y = +sY.value;
+    designBox.style.width  = s + 'px';
+    designBox.style.height = s + 'px';
+    designBox.style.left   = x + 'px';
+    designBox.style.top    = y + 'px';
   }
 
-  // Drag design with mouse
-  let dragging = false, dragStartX, dragStartY, layerStartX, layerStartY;
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-  designLayer.addEventListener('mousedown', e => {
+  sSize.addEventListener('input', () => { vSize.textContent = sSize.value; applyPos(); });
+  sX.addEventListener('input',    () => { vX.textContent    = sX.value;    applyPos(); });
+  sY.addEventListener('input',    () => { vY.textContent    = sY.value;    applyPos(); });
+
+  // ── Drag ───────────────────────────────────────────────────────────────────
+  let drag = false, dsx, dsy, dlx, dly;
+
+  designBox.addEventListener('mousedown', e => {
     if (e.target === resizeHandle) return;
-    dragging = true;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    layerStartX = parseInt(designLayer.style.left);
-    layerStartY = parseInt(designLayer.style.top);
+    drag = true;
+    dsx = e.clientX; dsy = e.clientY;
+    dlx = +sX.value; dly = +sY.value;
     e.preventDefault();
   });
-
   document.addEventListener('mousemove', e => {
-    if (!dragging) return;
-    const dx = e.clientX - dragStartX;
-    const dy = e.clientY - dragStartY;
-    const newX = Math.max(0, Math.min(CANVAS_W - parseInt(designLayer.style.width), layerStartX + dx));
-    const newY = Math.max(0, Math.min(CANVAS_H - parseInt(designLayer.style.height), layerStartY + dy));
-    designLayer.style.left = newX + 'px';
-    designLayer.style.top  = newY + 'px';
-    xSlider.value = newX; xVal.textContent = newX;
-    ySlider.value = newY; yVal.textContent = newY;
+    if (!drag) return;
+    const sz = +sSize.value;
+    const nx = clamp(dlx + e.clientX - dsx, 0, PREVIEW_W - sz);
+    const ny = clamp(dly + e.clientY - dsy, 0, PREVIEW_H - sz);
+    sX.value = nx; vX.textContent = Math.round(nx);
+    sY.value = ny; vY.textContent = Math.round(ny);
+    applyPos();
   });
+  document.addEventListener('mouseup', () => drag = false);
 
-  document.addEventListener('mouseup', () => dragging = false);
-
-  // Resize handle
-  let resizing = false, resizeStartX, resizeStartSize;
-
+  // ── Resize ─────────────────────────────────────────────────────────────────
+  let resize = false, rsx, rss;
   resizeHandle.addEventListener('mousedown', e => {
-    resizing = true;
-    resizeStartX = e.clientX;
-    resizeStartSize = parseInt(designLayer.style.width);
-    e.preventDefault();
-    e.stopPropagation();
+    resize = true; rsx = e.clientX; rss = +sSize.value;
+    e.preventDefault(); e.stopPropagation();
   });
-
   document.addEventListener('mousemove', e => {
-    if (!resizing) return;
-    const dx = e.clientX - resizeStartX;
-    const newSize = Math.max(50, Math.min(380, resizeStartSize + dx));
-    designLayer.style.width  = newSize + 'px';
-    designLayer.style.height = newSize + 'px';
-    sizeSlider.value = newSize; sizeVal.textContent = newSize;
+    if (!resize) return;
+    const ns = clamp(rss + (e.clientX - rsx), 40, 320);
+    sSize.value = ns; vSize.textContent = ns;
+    applyPos();
   });
+  document.addEventListener('mouseup', () => resize = false);
 
-  document.addEventListener('mouseup', () => resizing = false);
-
-  // Render
+  // ── Render ─────────────────────────────────────────────────────────────────
   renderBtn.addEventListener('click', async () => {
-    if (!selectedFile) return;
+    if (!file) return;
 
-    // Get design position/size in preview coords
-    const px = parseInt(designLayer.style.left);
-    const py = parseInt(designLayer.style.top);
-    const pw = parseInt(designLayer.style.width);
-    const ph = parseInt(designLayer.style.height);
-
-    // Scale to actual shirt coords
-    const sx = Math.round(px * SCALE_X);
-    const sy = Math.round(py * SCALE_Y);
-    const sw = Math.round(pw * SCALE_X);
-    const sh = Math.round(ph * SCALE_Y);
+    // Scale preview coords → shirt canvas coords
+    const scaleX = SHIRT_W / PREVIEW_W;
+    const scaleY = SHIRT_H / PREVIEW_H;
+    const sx = Math.round(+sX.value    * scaleX);
+    const sy = Math.round(+sY.value    * scaleY);
+    const sw = Math.round(+sSize.value * scaleX);
+    const sh = Math.round(+sSize.value * scaleY);
 
     renderBtn.disabled = true;
-    status.className = 'status loading';
-    status.innerHTML = '<span class="spinner"></span>Rendering...';
-    resultImg.classList.remove('visible');
-    downloadBtn.classList.remove('visible');
+    status.className = 'status';
+    status.innerHTML = '<span class="spin"></span>Rendering…';
+    resultImg.classList.remove('show');
+    dlBtn.classList.remove('show');
 
     const form = new FormData();
-    form.append('file', selectedFile);
+    form.append('file', file);
     form.append('x', sx);
     form.append('y', sy);
     form.append('w', sw);
@@ -430,16 +345,15 @@
     try {
       const res = await fetch('/render', { method: 'POST', body: form });
       if (!res.ok) throw new Error('Server error ' + res.status);
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(await res.blob());
       resultImg.src = url;
-      resultImg.classList.add('visible');
-      downloadBtn.href = url;
-      downloadBtn.classList.add('visible');
-      status.className = 'status';
+      resultImg.classList.add('show');
+      dlBtn.href = url;
+      dlBtn.classList.add('show');
+      status.className = 'status ok';
       status.textContent = '✓ Done';
     } catch (err) {
-      status.className = 'status error';
+      status.className = 'status err';
       status.textContent = '✗ ' + err.message;
     } finally {
       renderBtn.disabled = false;
