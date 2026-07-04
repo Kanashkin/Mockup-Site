@@ -46,8 +46,11 @@ class MockupEngine:
         self.canvas_w = pkg["canvas"]["width"]
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
-        pz   = pkg["print_zone"]
-        self.print_zone = pz
+
+        # Используем ВСЮ зону варпа — полная футболка
+        src_w = warp["bounds"]["right"]
+        src_h = warp["bounds"]["bottom"]
+        self.print_zone = {"x0": 0, "y0": 0, "x1": int(src_w), "y1": int(src_h)}
 
         self.shirt_arr = (np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png"))
                           .convert("RGB")).astype(np.float32) / 255)
@@ -60,8 +63,6 @@ class MockupEngine:
                    .convert("RGB")).astype(np.float32) / 255)
             self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
 
-        src_w = warp["bounds"]["right"]
-        src_h = warp["bounds"]["bottom"]
         self.src_w = src_w
         self.src_h = src_h
         tx = warp["transform"]
@@ -164,5 +165,4 @@ def health():
     return {"status": "ok", "canvas": f"{engine.canvas_w}x{engine.canvas_h}"}
 
 
-# Serve frontend — index.html лежит в корне репо
 app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
