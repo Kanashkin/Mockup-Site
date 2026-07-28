@@ -25,9 +25,6 @@
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
     .card-body{padding:16px}
-
-    /* Color picker */
-    .color-section{}
     .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
     .preset{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s;flex-shrink:0}
     .preset:hover{transform:scale(1.15)}
@@ -36,8 +33,6 @@
     .color-row label{font-size:12px;color:var(--muted)}
     #colorPicker{width:44px;height:32px;border:none;border-radius:6px;cursor:pointer;padding:0;background:none}
     #colorHex{font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;width:80px;font-family:monospace}
-
-    /* Sliders */
     .sliders{display:flex;flex-direction:column;gap:12px}
     .row{display:flex;align-items:center;gap:10px;font-size:13px}
     .row label{width:48px;color:var(--muted);font-size:12px}
@@ -60,10 +55,8 @@
   </style>
 </head>
 <body>
-
 <h1>T-Shirt <span>Mockup</span></h1>
 <p class="sub">Upload your design — position it and pick a color</p>
-
 <div class="main">
   <div class="preview-wrap">
     <canvas id="previewCanvas" width="460" height="690"></canvas>
@@ -74,10 +67,7 @@
       <div class="sub2">PNG with transparency works best</div>
     </div>
   </div>
-
   <div class="sidebar">
-
-    <!-- Shirt Color -->
     <div class="card">
       <div class="card-title">Shirt Color</div>
       <div class="card-body">
@@ -89,8 +79,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Position -->
     <div class="card">
       <div class="card-title">Position & Size</div>
       <div class="card-body">
@@ -103,8 +91,6 @@
         <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
     </div>
-
-    <!-- Export -->
     <div class="card">
       <div class="card-title">Export</div>
       <div class="card-body">
@@ -118,81 +104,89 @@
 </div>
 
 <script>
-const CW=460,CH=690;
-const SRC_W=2342,SRC_H=2616;
+const CW=460, CH=690;
+const SRC_W=2342, SRC_H=2616;
 
-// Shirt color presets
-const PRESETS = [
-  {name:'White',   hex:'#ffffff'},
-  {name:'Black',   hex:'#1a1a1a'},
-  {name:'Navy',    hex:'#1d3557'},
-  {name:'Red',     hex:'#e63946'},
-  {name:'Forest',  hex:'#2d6a4f'},
-  {name:'Sage',    hex:'#84a98c'},
-  {name:'Sand',    hex:'#d4a574'},
-  {name:'Slate',   hex:'#64748b'},
-  {name:'Maroon',  hex:'#7b2d8b'},
-  {name:'Orange',  hex:'#e76f51'},
-  {name:'Sky',     hex:'#48cae4'},
-  {name:'Pink',    hex:'#f4a261'},
+const PRESETS=[
+  {name:'White',  hex:'#ffffff'},{name:'Black',  hex:'#1a1a1a'},
+  {name:'Navy',   hex:'#1d3557'},{name:'Red',    hex:'#e63946'},
+  {name:'Forest', hex:'#2d6a4f'},{name:'Sage',   hex:'#84a98c'},
+  {name:'Sand',   hex:'#d4a574'},{name:'Slate',  hex:'#64748b'},
+  {name:'Maroon', hex:'#7b2d8b'},{name:'Orange', hex:'#e76f51'},
+  {name:'Sky',    hex:'#48cae4'},{name:'Pink',   hex:'#f4a261'},
 ];
 
-// Build presets UI
-const presetsEl = document.getElementById('presets');
-PRESETS.forEach(p => {
-  const el = document.createElement('div');
-  el.className = 'preset' + (p.hex==='#ffffff'?' active':'');
-  el.style.background = p.hex;
-  el.style.border = p.hex==='#ffffff'||p.hex==='#f5f5f5' ? '2px solid #444' : '2px solid transparent';
-  el.title = p.name;
+const presetsEl=document.getElementById('presets');
+PRESETS.forEach(p=>{
+  const el=document.createElement('div');
+  el.className='preset'+(p.hex==='#ffffff'?' active':'');
+  el.style.background=p.hex;
+  if(p.hex==='#ffffff')el.style.border='2px solid #555';
+  el.title=p.name;
   el.addEventListener('click',()=>setColor(p.hex,el));
   presetsEl.appendChild(el);
 });
 
-let shirtColor = '#ffffff';
-let activePreset = presetsEl.firstChild;
-
-function setColor(hex, presetEl) {
-  shirtColor = hex;
-  document.getElementById('colorPicker').value = hex;
-  document.getElementById('colorHex').value = hex;
-  // Update active preset
+let shirtColor='#ffffff';
+function setColor(hex,presetEl){
+  shirtColor=hex;
+  document.getElementById('colorPicker').value=hex;
+  document.getElementById('colorHex').value=hex;
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
-  if (presetEl) presetEl.classList.add('active');
+  if(presetEl)presetEl.classList.add('active');
   drawPreview();
 }
-
-document.getElementById('colorPicker').addEventListener('input', e=>{
+document.getElementById('colorPicker').addEventListener('input',e=>{
   shirtColor=e.target.value;
   document.getElementById('colorHex').value=e.target.value;
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
   drawPreview();
 });
-document.getElementById('colorHex').addEventListener('change', e=>{
+document.getElementById('colorHex').addEventListener('change',e=>{
   let v=e.target.value;
   if(!v.startsWith('#'))v='#'+v;
-  if(/^#[0-9a-fA-F]{6}$/.test(v)){
-    shirtColor=v;
-    document.getElementById('colorPicker').value=v;
-    drawPreview();
-  }
+  if(/^#[0-9a-fA-F]{6}$/.test(v)){shirtColor=v;document.getElementById('colorPicker').value=v;drawPreview();}
 });
 
-// Canvas & state
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
-let shirtImg=null,designImg=null,file=null;
-let warpMap=null,warpedPixels=null;
+let shirtImg=null, designImg=null, file=null;
+let warpMap=null, warpedPixels=null;
+let shirtPixels=null; // original shirt pixels (460x690 RGBA)
+let maskPixels=null;  // shirt mask (460x690, 0 or 255)
 let pos={cx:0.5,cy:0.48,size:0.35};
 
 // Load shirt
 const si=new Image();
-si.onload=()=>{shirtImg=si;drawPreview();};
+si.onload=()=>{
+  shirtImg=si;
+  // Extract shirt pixels into array once
+  const tmp=document.createElement('canvas');
+  tmp.width=CW; tmp.height=CH;
+  const tg=tmp.getContext('2d');
+  tg.drawImage(si,0,0,CW,CH);
+  shirtPixels=tg.getImageData(0,0,CW,CH).data.slice(); // copy
+  drawPreview();
+};
 si.src='/shirt_preview.png';
+
+// Load mask
+const mi=new Image();
+mi.onload=()=>{
+  const tmp=document.createElement('canvas');
+  tmp.width=CW; tmp.height=CH;
+  const tg=tmp.getContext('2d');
+  tg.drawImage(mi,0,0,CW,CH);
+  const raw=tg.getImageData(0,0,CW,CH).data;
+  maskPixels=new Uint8Array(CW*CH);
+  for(let i=0;i<CW*CH;i++) maskPixels[i]=raw[i*4]>128?255:0;
+  drawPreview();
+};
+mi.src='/shirt_mask_preview.png';
 
 // Load warp map
 fetch('/warp_data.json').then(r=>r.json()).then(d=>{
-  warpMap=d;buildWarpLookup();drawPreview();
+  warpMap=d; buildWarpLookup(); drawPreview();
 });
 
 function buildWarpLookup(){
@@ -201,10 +195,10 @@ function buildWarpLookup(){
   warpedPixels=new Float32Array(CW*CH*2);
   for(let py=0;py<CH;py++){
     for(let px=0;px<CW;px++){
-      const mxf=px/CW*mw,myf=py/CH*mh;
-      const mx0=Math.floor(mxf),my0=Math.floor(myf);
-      const mx1=Math.min(mx0+1,mw-1),my1=Math.min(my0+1,mh-1);
-      const fx=mxf-mx0,fy=myf-my0;
+      const mxf=px/CW*mw, myf=py/CH*mh;
+      const mx0=Math.floor(mxf), my0=Math.floor(myf);
+      const mx1=Math.min(mx0+1,mw-1), my1=Math.min(my0+1,mh-1);
+      const fx=mxf-mx0, fy=myf-my0;
       const i00=my0*mw+mx0,i10=my0*mw+mx1,i01=my1*mw+mx0,i11=my1*mw+mx1;
       const xu=mx[i00];
       if(xu<0){warpedPixels[(py*CW+px)*2]=-1;continue;}
@@ -220,53 +214,49 @@ function buildWarpLookup(){
   }
 }
 
-// Parse hex color to rgb 0-1
 function hexToRgb(hex){
   return[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255];
 }
 
-// Draw preview
 function drawPreview(){
   ctx.clearRect(0,0,CW,CH);
-  if(!shirtImg){return;}
+  if(!shirtImg||!shirtPixels)return;
 
-  // Draw shirt with color tint
-  if(shirtColor==='#ffffff'){
-    ctx.drawImage(shirtImg,0,0,CW,CH);
-  } else {
-    // Draw shirt then recolor via canvas compositing
-    ctx.drawImage(shirtImg,0,0,CW,CH);
-    const [tr,tg,tb]=hexToRgb(shirtColor);
-    // Get pixel data and recolor
-    const imgData=ctx.getImageData(0,0,CW,CH);
-    const d=imgData.data;
-    for(let i=0;i<d.length;i+=4){
-      const lum=0.299*d[i]/255+0.587*d[i+1]/255+0.114*d[i+2]/255;
-      // Simple desaturate check - if pixel is greyish (shirt) recolor it
-      const mx=Math.max(d[i],d[i+1],d[i+2]);
-      const mn=Math.min(d[i],d[i+1],d[i+2]);
-      const sat=mx>10?(mx-mn)/mx:0;
-      if(sat<0.25&&mx>20){
-        d[i]=Math.round(lum*tr*255);
-        d[i+1]=Math.round(lum*tg*255);
-        d[i+2]=Math.round(lum*tb*255);
-      }
+  // Build recolored shirt using mask + luminance
+  const out=new Uint8ClampedArray(CW*CH*4);
+  const [tr,tg,tb]=hexToRgb(shirtColor);
+  const isWhite=shirtColor==='#ffffff';
+
+  for(let i=0;i<CW*CH;i++){
+    const si4=i*4;
+    const sr=shirtPixels[si4]/255, sg=shirtPixels[si4+1]/255, sb=shirtPixels[si4+2]/255;
+    if(!isWhite && maskPixels && maskPixels[i]>128){
+      // Recolor via luminance
+      const lum=0.299*sr+0.587*sg+0.114*sb;
+      out[si4]=Math.round(lum*tr*255);
+      out[si4+1]=Math.round(lum*tg*255);
+      out[si4+2]=Math.round(lum*tb*255);
+    } else {
+      out[si4]=shirtPixels[si4];
+      out[si4+1]=shirtPixels[si4+1];
+      out[si4+2]=shirtPixels[si4+2];
     }
-    ctx.putImageData(imgData,0,0);
+    out[si4+3]=255;
   }
 
-  if(!designImg||!warpedPixels)return;
+  ctx.putImageData(new ImageData(out,CW,CH),0,0);
 
   // Apply warped design
+  if(!designImg||!warpedPixels)return;
   const offC=document.createElement('canvas');
-  offC.width=designImg.naturalWidth;offC.height=designImg.naturalHeight;
+  offC.width=designImg.naturalWidth; offC.height=designImg.naturalHeight;
   const offG=offC.getContext('2d');
   offG.drawImage(designImg,0,0);
   const dw=offC.width,dh=offC.height;
   const dd=offG.getImageData(0,0,dw,dh).data;
 
   const sd=ctx.getImageData(0,0,CW,CH);
-  const out=sd.data;
+  const od=sd.data;
   const half=pos.size/2;
 
   for(let py=0;py<CH;py++){
@@ -282,20 +272,18 @@ function drawPreview(){
       const da=dd[di+3]/255;
       if(da<0.01)continue;
       const oi=(py*CW+px)*4;
-      const dr=dd[di]/255,dg=dd[di+1]/255,db=dd[di+2]/255;
-      const sr=out[oi]/255,sg=out[oi+1]/255,sb=out[oi+2]/255;
-      out[oi]=Math.round((sr*(1-da)+sr*dr*da)*255);
-      out[oi+1]=Math.round((sg*(1-da)+sg*dg*da)*255);
-      out[oi+2]=Math.round((sb*(1-da)+sb*db*da)*255);
+      const dr=dd[di]/255,dg=dd[di+1]/255,db2=dd[di+2]/255;
+      const sr2=od[oi]/255,sg2=od[oi+1]/255,sb2=od[oi+2]/255;
+      od[oi]=Math.round((sr2*(1-da)+sr2*dr*da)*255);
+      od[oi+1]=Math.round((sg2*(1-da)+sg2*dg*da)*255);
+      od[oi+2]=Math.round((sb2*(1-da)+sb2*db2*da)*255);
     }
   }
   ctx.putImageData(sd,0,0);
 }
 
 // Upload
-document.getElementById('fileInput').addEventListener('change',e=>{
-  if(e.target.files[0])loadDesign(e.target.files[0]);
-});
+document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])loadDesign(e.target.files[0]);});
 function loadDesign(f){
   file=f;
   const img=new Image();
@@ -327,8 +315,7 @@ document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy
 let dragging=false,dsx,dsy,dcx,dcy;
 canvas.addEventListener('mousedown',e=>{
   if(!designImg)return;
-  dragging=true;dsx=e.offsetX;dsy=e.offsetY;dcx=pos.cx;dcy=pos.cy;
-  e.preventDefault();
+  dragging=true;dsx=e.offsetX;dsy=e.offsetY;dcx=pos.cx;dcy=pos.cy;e.preventDefault();
 });
 document.addEventListener('mousemove',e=>{
   if(!dragging)return;
@@ -363,10 +350,8 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   document.getElementById('dlBtn').classList.remove('show');
 
   const form=new FormData();
-  form.append('file',file);
-  form.append('x',sx);form.append('y',sy);
-  form.append('w',sw);form.append('h',sh);
-  form.append('color',shirtColor);
+  form.append('file',file);form.append('x',sx);form.append('y',sy);
+  form.append('w',sw);form.append('h',sh);form.append('color',shirtColor);
 
   try{
     const res=await fetch('/render',{method:'POST',body:form});
