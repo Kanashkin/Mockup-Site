@@ -23,11 +23,9 @@ class MockupEngine:
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
 
-        # Just the background photo - no overlays
-        self.shirt_arr = np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png"))
-                          .convert("RGB")).astype(np.float32) / 255
-        self.mask_arr  = np.array(Image.open(os.path.join(mockup_dir, "tshirt_mask.png"))
-                          .convert("L")).astype(np.float32) / 255
+        self.shirt_arr  = np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png")).convert("RGB")).astype(np.float32)/255
+        self.mask_arr   = np.array(Image.open(os.path.join(mockup_dir, "tshirt_mask.png")).convert("L")).astype(np.float32)/255
+        self.shirt_full_mask = np.array(Image.open(os.path.join(mockup_dir, "shirt_full_mask.png")).convert("L")).astype(np.float32)/255
 
         src_w = warp["bounds"]["right"]
         src_h = warp["bounds"]["bottom"]
@@ -35,57 +33,72 @@ class MockupEngine:
         self.src_h = src_h
 
         tx = warp["transform"]
-        canvas_corners = np.float32([[tx[0],tx[1]], [tx[2],tx[3]], [tx[4],tx[5]], [tx[6],tx[7]]])
+        canvas_corners = np.float32([[tx[0],tx[1]],[tx[2],tx[3]],[tx[4],tx[5]],[tx[6],tx[7]]])
         src_corners    = np.float32([[0,0],[src_w,0],[src_w,src_h],[0,src_h]])
         H_inv = np.linalg.inv(cv2.getPerspectiveTransform(src_corners, canvas_corners))
 
-        u_norm = np.array([0, 1/3, 2/3, 1])
-        v_norm = np.array([0, 1/3, 2/3, 1])
-        reg_x  = np.tile(u_norm, 4) * src_w
-        reg_y  = np.repeat(v_norm, 4) * src_h
+        u_norm = np.array([0,1/3,2/3,1])
+        v_norm = np.array([0,1/3,2/3,1])
+        reg_x  = np.tile(u_norm,4)*src_w
+        reg_y  = np.repeat(v_norm,4)*src_h
         mx = np.array(warp["mesh_x"]).reshape(4,4)
         my = np.array(warp["mesh_y"]).reshape(4,4)
-        displaced = np.column_stack([mx.ravel(), my.ravel()])
+        displaced = np.column_stack([mx.ravel(),my.ravel()])
 
         print("Precomputing warp map...")
-        cw, ch = self.canvas_w, self.canvas_h
-        ys, xs = np.mgrid[0:ch, 0:cw]
-        cp  = np.column_stack([xs.ravel().astype(np.float64), ys.ravel().astype(np.float64)])
-        cp_h = np.concatenate([cp, np.ones((len(cp),1))], axis=1)
-        sp_h = (H_inv @ cp_h.T).T
-        src_x = sp_h[:,0] / sp_h[:,2]
-        src_y = sp_h[:,1] / sp_h[:,2]
-        in_r  = (src_x>=-300) & (src_x<=src_w+300) & (src_y>=-300) & (src_y<=src_h+300)
+        cw,ch = self.canvas_w,self.canvas_h
+        ys,xs = np.mgrid[0:ch,0:cw]
+        cp  = np.column_stack([xs.ravel().astype(np.float64),ys.ravel().astype(np.float64)])
+        cp_h = np.concatenate([cp,np.ones((len(cp),1))],axis=1)
+        sp_h = (H_inv@cp_h.T).T
+        src_x = sp_h[:,0]/sp_h[:,2]
+        src_y = sp_h[:,1]/sp_h[:,2]
+        in_r  = (src_x>=-300)&(src_x<=src_w+300)&(src_y>=-300)&(src_y<=src_h+300)
         ridx  = np.where(in_r)[0]
-        rsp   = np.column_stack([src_x[in_r], src_y[in_r]])
-        self._rx   = griddata(displaced, reg_x, rsp, method="cubic")
-        self._ry   = griddata(displaced, reg_y, rsp, method="cubic")
+        rsp   = np.column_stack([src_x[in_r],src_y[in_r]])
+        self._rx   = griddata(displaced,reg_x,rsp,method="cubic")
+        self._ry   = griddata(displaced,reg_y,rsp,method="cubic")
         self._ridx = ridx
         print("Ready.")
 
-    def render(self, design_img, x=0, y=0, w=None, h=None):
-        sw, sh = int(self.src_w), int(self.src_h)
-        if w is None: w = sw
-        if h is None: h = sh
+    def recolor(self, shirt, color_hex):
+        """Recolor shirt using luminance * target color."""
+        r = int(color_hex[1:3],16)/255
+        g = int(color_hex[3:5],16)/255
+        b = int(color_hex[5:7],16)/255
+        lum = 0.299*shirt[:,:,0] + 0.587*shirt[:,:,1] + 0.114*shirt[:,:,2]
+        m = self.shirt_full_mask > 0.1
+        result = shirt.copy()
+        result[:,:,0] = np.where(m, lum*r, shirt[:,:,0])
+        result[:,:,1] = np.where(m, lum*g, shirt[:,:,1])
+        result[:,:,2] = np.where(m, lum*b, shirt[:,:,2])
+        return result
 
-        src_canvas = Image.new("RGBA", (sw, sh), (0,0,0,0))
-        src_canvas.paste(design_img.resize((w, h), Image.LANCZOS), (x, y))
-        dw, dh = src_canvas.size
+    def render(self, design_img, x=0, y=0, w=None, h=None, color="#ffffff"):
+        sw,sh = int(self.src_w),int(self.src_h)
+        if w is None: w=sw
+        if h is None: h=sh
+
+        # Recolor shirt if needed
+        shirt = self.shirt_arr if color=="#ffffff" else self.recolor(self.shirt_arr, color)
+
+        src_canvas = Image.new("RGBA",(sw,sh),(0,0,0,0))
+        src_canvas.paste(design_img.resize((w,h),Image.LANCZOS),(x,y))
+        dw,dh = src_canvas.size
         design_arr = np.array(src_canvas).astype(np.float32)
 
-        nx = self._rx / self.src_w * dw
-        ny = self._ry / self.src_h * dh
-        valid = (~np.isnan(nx)) & (~np.isnan(ny)) & (nx>=0) & (nx<dw-1) & (ny>=0) & (ny<dh-1)
+        nx = self._rx/self.src_w*dw
+        ny = self._ry/self.src_h*dh
+        valid = (~np.isnan(nx))&(~np.isnan(ny))&(nx>=0)&(nx<dw-1)&(ny>=0)&(ny<dh-1)
 
-        warped = np.zeros((self.canvas_h, self.canvas_w, 4), dtype=np.float32)
+        warped = np.zeros((self.canvas_h,self.canvas_w,4),dtype=np.float32)
         vi = np.where(valid)[0]; fi = self._ridx[vi]
-        warped[fi//self.canvas_w, fi%self.canvas_w] = design_arr[ny[valid].astype(int), nx[valid].astype(int)]
-        warped[:,:,3] = warped[:,:,3] * self.mask_arr
+        warped[fi//self.canvas_w,fi%self.canvas_w] = design_arr[ny[valid].astype(int),nx[valid].astype(int)]
+        warped[:,:,3] = warped[:,:,3]*self.mask_arr
 
-        # Multiply blend — design darkens shirt where it has color
-        alpha      = warped[:,:,3:4] / 255
-        design_rgb = warped[:,:,:3]  / 255
-        result     = self.shirt_arr * (1-alpha) + self.shirt_arr * design_rgb * alpha
+        alpha      = warped[:,:,3:4]/255
+        design_rgb = warped[:,:,:3]/255
+        result     = shirt*(1-alpha) + shirt*design_rgb*alpha
 
         return Image.fromarray((np.clip(result,0,1)*255).astype(np.uint8))
 
@@ -95,27 +108,28 @@ engine = MockupEngine(MOCKUP_DIR)
 async def render_mockup(
     file: UploadFile = File(...),
     x: int = Form(0), y: int = Form(0),
-    w: int = Form(None), h: int = Form(None)
+    w: int = Form(None), h: int = Form(None),
+    color: str = Form("#ffffff")
 ):
     if not file.content_type.startswith("image/"):
-        raise HTTPException(400, "File must be an image")
+        raise HTTPException(400,"File must be an image")
     data = await file.read()
-    if len(data) > 20 * 1024 * 1024:
-        raise HTTPException(400, "File too large")
+    if len(data) > 20*1024*1024:
+        raise HTTPException(400,"File too large")
     try:
         design = Image.open(io.BytesIO(data)).convert("RGBA")
     except:
-        raise HTTPException(400, "Could not read image")
+        raise HTTPException(400,"Could not read image")
 
-    result = engine.render(design, x=x, y=y, w=w, h=h)
+    result = engine.render(design,x=x,y=y,w=w,h=h,color=color)
     buf = io.BytesIO()
-    result.save(buf, format="PNG", optimize=True)
+    result.save(buf,format="PNG",optimize=True)
     buf.seek(0)
-    return Response(content=buf.read(), media_type="image/png",
-                    headers={"Content-Disposition": "attachment; filename=mockup.png"})
+    return Response(content=buf.read(),media_type="image/png",
+                    headers={"Content-Disposition":"attachment; filename=mockup.png"})
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status":"ok"}
 
-app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
+app.mount("/",StaticFiles(directory=os.path.dirname(__file__),html=True),name="static")
