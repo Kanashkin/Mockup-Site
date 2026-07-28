@@ -5,55 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mockup Generator</title>
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --bg:#0f0f0f; --surface:#1a1a1a; --border:#2a2a2a; --accent:#e8ff47; --text:#f0f0f0; --muted:#555; }
-    body { background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:28px 16px; gap:20px; }
-    h1 { font-size:28px; font-weight:700; letter-spacing:-1px; }
-    h1 span { color:var(--accent); }
-    .sub { color:var(--muted); font-size:13px; margin-top:4px; text-align:center; }
-    .main { display:flex; gap:24px; width:100%; max-width:1040px; align-items:flex-start; }
-
-    /* WebGL canvas */
-    .preview-wrap { flex:0 0 auto; position:relative; width:460px; }
-    #glCanvas { width:460px; height:690px; border-radius:12px; display:block; cursor:crosshair; }
-    #glCanvas.has-design { cursor:move; }
-
-    /* Upload overlay */
-    #uploadOverlay {
-      position:absolute; inset:0; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; gap:8px;
-      border-radius:12px; background:rgba(0,0,0,0.5); cursor:pointer;
-    }
-    #uploadOverlay input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
-    #uploadOverlay .icon { font-size:38px; }
-    #uploadOverlay .txt { font-size:14px; color:#fff; font-weight:600; }
-    #uploadOverlay .sub2 { font-size:12px; color:rgba(255,255,255,0.4); }
-    #uploadOverlay.hidden { display:none; }
-
-    /* Sidebar */
-    .sidebar { flex:1; display:flex; flex-direction:column; gap:14px; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-    .card-title { padding:10px 16px; border-bottom:1px solid var(--border); font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
-    .card-body { padding:16px; }
-    .sliders { display:flex; flex-direction:column; gap:12px; }
-    .row { display:flex; align-items:center; gap:10px; font-size:13px; }
-    .row label { width:48px; color:var(--muted); font-size:12px; }
-    .row input[type=range] { flex:1; accent-color:var(--accent); }
-    .row span { width:36px; text-align:right; font-size:12px; }
-    .hint { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
-    .btn { width:100%; padding:13px; background:var(--accent); color:#111; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:opacity .2s; }
-    .btn:disabled { opacity:.3; cursor:not-allowed; }
-    .btn:hover:not(:disabled) { opacity:.85; }
-    .btn2 { width:100%; padding:10px; background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; font-size:13px; cursor:pointer; margin-top:8px; transition:border-color .2s,color .2s; }
-    .btn2:hover { border-color:var(--accent); color:var(--accent); }
-    .dl { display:none; width:100%; margin-top:10px; padding:11px; background:transparent; color:var(--accent); border:1px solid var(--accent); border-radius:8px; font-size:13px; font-weight:600; text-align:center; text-decoration:none; }
-    .dl.show { display:block; }
-    #resultImg { width:100%; border-radius:8px; display:none; margin-top:8px; }
-    #resultImg.show { display:block; }
-    .status { margin-top:8px; font-size:12px; color:var(--muted); text-align:center; min-height:16px; }
-    .status.err { color:#f66; } .status.ok { color:var(--accent); }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    .spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(232,255,71,.3); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:4px; }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;--accent:#e8ff47;--text:#f0f0f0;--muted:#555}
+    body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
+    h1{font-size:28px;font-weight:700;letter-spacing:-1px}
+    h1 span{color:var(--accent)}
+    .sub{color:var(--muted);font-size:13px;margin-top:4px;text-align:center}
+    .main{display:flex;gap:24px;width:100%;max-width:1040px;align-items:flex-start}
+    .preview-wrap{flex:0 0 auto;position:relative;width:460px}
+    #previewCanvas{width:460px;height:690px;border-radius:12px;display:block;cursor:crosshair;background:#222}
+    #previewCanvas.has-design{cursor:move}
+    #uploadOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border-radius:12px;background:rgba(0,0,0,0.5);cursor:pointer}
+    #uploadOverlay input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    #uploadOverlay .icon{font-size:38px}
+    #uploadOverlay .txt{font-size:14px;color:#fff;font-weight:600}
+    #uploadOverlay .sub2{font-size:12px;color:rgba(255,255,255,0.4)}
+    #uploadOverlay.hidden{display:none}
+    .sidebar{flex:1;display:flex;flex-direction:column;gap:14px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+    .card-body{padding:16px}
+    .sliders{display:flex;flex-direction:column;gap:12px}
+    .row{display:flex;align-items:center;gap:10px;font-size:13px}
+    .row label{width:48px;color:var(--muted);font-size:12px}
+    .row input[type=range]{flex:1;accent-color:var(--accent)}
+    .row span{width:36px;text-align:right;font-size:12px}
+    .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+    .btn{width:100%;padding:13px;background:var(--accent);color:#111;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .2s}
+    .btn:disabled{opacity:.3;cursor:not-allowed}
+    .btn:hover:not(:disabled){opacity:.85}
+    .btn2{width:100%;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;transition:border-color .2s,color .2s}
+    .btn2:hover{border-color:var(--accent);color:var(--accent)}
+    .dl{display:none;width:100%;margin-top:10px;padding:11px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:600;text-align:center;text-decoration:none}
+    .dl.show{display:block}
+    #resultImg{width:100%;border-radius:8px;display:none;margin-top:8px}
+    #resultImg.show{display:block}
+    .status{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;min-height:16px}
+    .status.err{color:#f66}.status.ok{color:var(--accent)}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(232,255,71,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
   </style>
 </head>
 <body>
@@ -63,7 +53,7 @@
 
 <div class="main">
   <div class="preview-wrap">
-    <canvas id="glCanvas" width="920" height="1380"></canvas>
+    <canvas id="previewCanvas" width="460" height="690"></canvas>
     <div id="uploadOverlay">
       <input type="file" id="fileInput" accept="image/*">
       <div class="icon">🎨</div>
@@ -79,9 +69,9 @@
         <div class="sliders">
           <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
           <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
-          <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="35"><span id="vY">35%</span></div>
+          <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="38"><span id="vY">38%</span></div>
         </div>
-        <p class="hint">💡 Drag design directly on the shirt preview</p>
+        <p class="hint">💡 Drag design on the shirt, scroll to resize</p>
         <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
     </div>
@@ -99,234 +89,197 @@
 </div>
 
 <script>
-const CW = 920, CH = 1380; // canvas pixel size (2x for retina)
-const DISP_W = 460, DISP_H = 690; // CSS display size
+const CW = 460, CH = 690;
 const SRC_W = 2342, SRC_H = 2616;
 
-let gl, shirtTex, designTex, warpProgram, flatProgram, warpData;
-let file = null;
-let pos = { cx: 0.5, cy: 0.35, size: 0.35 };
+let ctx, shirtImg, designImg, file = null;
+let warpMap = null; // {map_w, map_h, map_x[], map_y[]}
+let warpedPixels = null; // precomputed warp lookup per canvas pixel
+
+let pos = {cx: 0.5, cy: 0.38, size: 0.35};
+
+// Init
+const canvas = document.getElementById('previewCanvas');
+ctx = canvas.getContext('2d');
+
+// Load shirt
+shirtImg = new Image();
+shirtImg.onload = () => drawPreview();
+shirtImg.src = '/shirt_preview.png';
 
 // Load warp data
 fetch('/warp_data.json').then(r => r.json()).then(d => {
-  warpData = d;
-  initGL();
+  warpMap = d;
+  buildWarpLookup();
+  drawPreview();
 });
 
-function initGL() {
-  const canvas = document.getElementById('glCanvas');
-  gl = canvas.getContext('webgl', { premultipliedAlpha: false });
-  if (!gl) { alert('WebGL not supported'); return; }
+// Build per-canvas-pixel warp lookup at full canvas resolution
+function buildWarpLookup() {
+  const mw = warpMap.map_w, mh = warpMap.map_h;
+  const mx = warpMap.map_x, my = warpMap.map_y;
+  // For each canvas pixel, bilinear interpolate from the low-res map
+  warpedPixels = new Float32Array(CW * CH * 2); // [srcU, srcV] per pixel
+  for (let py = 0; py < CH; py++) {
+    for (let px = 0; px < CW; px++) {
+      // Map canvas pixel to warp map coords
+      const mx_f = px / CW * mw;
+      const my_f = py / CH * mh;
+      const mx0 = Math.floor(mx_f), my0 = Math.floor(my_f);
+      const mx1 = Math.min(mx0+1, mw-1), my1 = Math.min(my0+1, mh-1);
+      const fx = mx_f - mx0, fy = my_f - my0;
 
-  // Compile shaders
-  warpProgram = makeProgram(
-    // Vertex: warp mesh
-    `attribute vec2 aPosition; attribute vec2 aDesignUV; attribute vec2 aShirtUV;
-     varying vec2 vDesignUV; varying vec2 vShirtUV;
-     void main() { gl_Position = vec4(aPosition, 0, 1); vDesignUV = aDesignUV; vShirtUV = aShirtUV; }`,
-    // Fragment: multiply blend
-    `precision mediump float;
-     uniform sampler2D uShirt; uniform sampler2D uDesign;
-     uniform float uHasDesign;
-     varying vec2 vDesignUV; varying vec2 vShirtUV;
-     void main() {
-       vec4 shirt = texture2D(uShirt, vShirtUV);
-       if (uHasDesign < 0.5) { gl_FragColor = shirt; return; }
-       vec4 design = texture2D(uDesign, vDesignUV);
-       // Multiply blend
-       vec3 blended = shirt.rgb * (design.rgb * design.a + vec3(1.0) * (1.0 - design.a));
-       gl_FragColor = vec4(blended, 1.0);
-     }`
-  );
+      const i00 = my0*mw+mx0, i10 = my0*mw+mx1;
+      const i01 = my1*mw+mx0, i11 = my1*mw+mx1;
 
-  // Load shirt texture
-  shirtTex = loadTexture('/shirt_preview.png', () => render());
+      const xu = mx[i00], xv = my[i00];
+      if (xu < 0) { warpedPixels[(py*CW+px)*2] = -1; continue; }
 
-  buildMesh();
-}
+      // Bilinear interp
+      const x00=mx[i00],x10=mx[i10],x01=mx[i01],x11=mx[i11];
+      const y00=my[i00],y10=my[i10],y01=my[i01],y11=my[i11];
 
-function makeProgram(vsrc, fsrc) {
-  const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, vsrc); gl.compileShader(vs);
-  const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, fsrc); gl.compileShader(fs);
-  const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-  return prog;
-}
+      if (x00<0||x10<0||x01<0||x11<0) {
+        warpedPixels[(py*CW+px)*2]   = x00 >= 0 ? x00 : -1;
+        warpedPixels[(py*CW+px)*2+1] = y00 >= 0 ? y00 : -1;
+        continue;
+      }
 
-function loadTexture(url, cb) {
-  const tex = gl.createTexture();
-  const img = new Image(); img.crossOrigin = 'anonymous';
-  img.onload = () => {
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    if (cb) cb();
-  };
-  img.src = url; return tex;
-}
-
-let posVBO, designVBO, shirtVBO, indexVBO;
-
-function buildMesh() {
-  if (!warpData) return;
-  const gc = warpData.grid_canvas; // NDC positions
-  const gd = warpData.grid_design; // design UV (0-1)
-  const gs = warpData.grid_shirt;  // shirt UV (0-1)
-  const idx = warpData.indices;
-
-  // We'll override design UVs per frame based on pos
-  posVBO    = makeBuffer(new Float32Array(gc.flat()));
-  designVBO = makeBuffer(new Float32Array(gd.flat())); // placeholder
-  shirtVBO  = makeBuffer(new Float32Array(gs.flat()));
-  indexVBO  = makeIndexBuffer(new Uint16Array(idx));
-}
-
-function makeBuffer(data) {
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-  return buf;
-}
-
-function makeIndexBuffer(data) {
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
-  return buf;
-}
-
-function updateDesignUVs() {
-  if (!warpData) return;
-  // For each grid point (in design UV space 0-1),
-  // remap so that pos.cx,cy is center and pos.size controls scale
-  const gd = warpData.grid_design;
-  const newUVs = [];
-  for (const [du, dv] of gd) {
-    // du,dv are in 0-1 source space
-    // We want to place design at pos.cx, pos.cy with size pos.size
-    // Design UV: map from source space to design image space
-    const half = pos.size / 2;
-    const u = (du - pos.cx) / pos.size + 0.5;
-    const v = (dv - pos.cy) / pos.size + 0.5;
-    newUVs.push(u, v);
+      const u = x00*(1-fx)*(1-fy) + x10*fx*(1-fy) + x01*(1-fx)*fy + x11*fx*fy;
+      const v = y00*(1-fx)*(1-fy) + y10*fx*(1-fy) + y01*(1-fx)*fy + y11*fx*fy;
+      warpedPixels[(py*CW+px)*2]   = u;
+      warpedPixels[(py*CW+px)*2+1] = v;
+    }
   }
-  gl.bindBuffer(gl.ARRAY_BUFFER, designVBO);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(newUVs), gl.DYNAMIC_DRAW);
 }
 
-function render() {
-  if (!gl || !warpData) return;
-  gl.viewport(0, 0, CW, CH);
-  gl.clearColor(0.1, 0.1, 0.1, 1);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+// Draw preview using pixel-level warp
+function drawPreview() {
+  ctx.clearRect(0, 0, CW, CH);
 
-  gl.useProgram(warpProgram);
+  // Draw shirt base
+  if (shirtImg.complete && shirtImg.naturalWidth) {
+    ctx.drawImage(shirtImg, 0, 0, CW, CH);
+  }
 
-  // Bind position
-  gl.bindBuffer(gl.ARRAY_BUFFER, posVBO);
-  const aPos = gl.getAttribLocation(warpProgram, 'aPosition');
-  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+  if (!designImg || !warpedPixels) return;
 
-  // Update and bind design UVs
-  if (designTex) updateDesignUVs();
-  gl.bindBuffer(gl.ARRAY_BUFFER, designVBO);
-  const aDUV = gl.getAttribLocation(warpProgram, 'aDesignUV');
-  gl.enableVertexAttribArray(aDUV); gl.vertexAttribPointer(aDUV, 2, gl.FLOAT, false, 0, 0);
+  // Get design pixels
+  const offCtx = document.createElement('canvas');
+  offCtx.width = designImg.naturalWidth;
+  offCtx.height = designImg.naturalHeight;
+  const offG = offCtx.getContext('2d');
+  offG.drawImage(designImg, 0, 0);
+  const dw = offCtx.width, dh = offCtx.height;
+  const designData = offG.getImageData(0, 0, dw, dh).data;
 
-  // Bind shirt UVs
-  gl.bindBuffer(gl.ARRAY_BUFFER, shirtVBO);
-  const aSUV = gl.getAttribLocation(warpProgram, 'aShirtUV');
-  gl.enableVertexAttribArray(aSUV); gl.vertexAttribPointer(aSUV, 2, gl.FLOAT, false, 0, 0);
+  // Get shirt pixels for multiply blend
+  const shirtData = ctx.getImageData(0, 0, CW, CH);
+  const out = shirtData.data;
 
-  // Textures
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shirtTex);
-  gl.uniform1i(gl.getUniformLocation(warpProgram, 'uShirt'), 0);
+  for (let py = 0; py < CH; py++) {
+    for (let px = 0; px < CW; px++) {
+      const wi = (py*CW+px)*2;
+      const su = warpedPixels[wi];
+      const sv = warpedPixels[wi+1];
+      if (su < 0) continue;
 
-  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, designTex || shirtTex);
-  gl.uniform1i(gl.getUniformLocation(warpProgram, 'uDesign'), 1);
-  gl.uniform1f(gl.getUniformLocation(warpProgram, 'uHasDesign'), designTex ? 1.0 : 0.0);
+      // Map source UV → design pixel
+      // Design sits at (cx-size/2, cy-size/2) to (cx+size/2, cy+size/2) in source UV
+      const half = pos.size / 2;
+      const du = (su - (pos.cx - half)) / pos.size;
+      const dv = (sv - (pos.cy - half)) / pos.size;
+      if (du < 0 || du >= 1 || dv < 0 || dv >= 1) continue;
 
-  gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      const dx = Math.floor(du * dw);
+      const dy = Math.floor(dv * dh);
+      const di = (dy * dw + dx) * 4;
+      const da = designData[di+3] / 255;
+      if (da < 0.01) continue;
 
-  // Draw
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexVBO);
-  gl.drawElements(gl.TRIANGLES, warpData.indices.length, gl.UNSIGNED_SHORT, 0);
+      const oi = (py*CW+px)*4;
+      // Multiply blend
+      const dr = designData[di]   / 255;
+      const dg = designData[di+1] / 255;
+      const db = designData[di+2] / 255;
+      const sr = out[oi]   / 255;
+      const sg = out[oi+1] / 255;
+      const sb = out[oi+2] / 255;
+
+      out[oi]   = Math.round((sr*(1-da) + sr*dr*da) * 255);
+      out[oi+1] = Math.round((sg*(1-da) + sg*dg*da) * 255);
+      out[oi+2] = Math.round((sb*(1-da) + sb*db*da) * 255);
+    }
+  }
+  ctx.putImageData(shirtData, 0, 0);
+}
+
+// Upload
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadDesign(e.target.files[0]);
+});
+function loadDesign(f) {
+  file = f;
+  const img = new Image();
+  img.onload = () => {
+    designImg = img;
+    document.getElementById('uploadOverlay').classList.add('hidden');
+    canvas.classList.add('has-design');
+    document.getElementById('renderBtn').disabled = false;
+    drawPreview();
+  };
+  img.src = URL.createObjectURL(f);
 }
 
 // Sliders
-const sSize=document.getElementById('sSize'), vSize=document.getElementById('vSize');
-const sX=document.getElementById('sX'), vX=document.getElementById('vX');
-const sY=document.getElementById('sY'), vY=document.getElementById('vY');
+const sSize=document.getElementById('sSize'),vSize=document.getElementById('vSize');
+const sX=document.getElementById('sX'),vX=document.getElementById('vX');
+const sY=document.getElementById('sY'),vY=document.getElementById('vY');
 
 function syncSliders() {
   sSize.value=Math.round(pos.size*100); vSize.textContent=sSize.value+'%';
   sX.value=Math.round(pos.cx*100);     vX.textContent=sX.value+'%';
   sY.value=Math.round(pos.cy*100);     vY.textContent=sY.value+'%';
 }
-sSize.addEventListener('input', () => { pos.size=sSize.value/100; vSize.textContent=sSize.value+'%'; render(); });
-sX.addEventListener('input',    () => { pos.cx=sX.value/100;     vX.textContent=sX.value+'%';     render(); });
-sY.addEventListener('input',    () => { pos.cy=sY.value/100;     vY.textContent=sY.value+'%';     render(); });
-document.getElementById('resetBtn').addEventListener('click', () => {
-  pos={cx:0.5,cy:0.35,size:0.35}; syncSliders(); render();
-});
+sSize.addEventListener('input',()=>{pos.size=sSize.value/100;vSize.textContent=sSize.value+'%';drawPreview();});
+sX.addEventListener('input',   ()=>{pos.cx=sX.value/100;    vX.textContent=sX.value+'%';    drawPreview();});
+sY.addEventListener('input',   ()=>{pos.cy=sY.value/100;    vY.textContent=sY.value+'%';    drawPreview();});
+document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy:0.38,size:0.35};syncSliders();drawPreview();});
 
-// Upload
-document.getElementById('fileInput').addEventListener('change', e => {
-  if (e.target.files[0]) loadDesign(e.target.files[0]);
-});
-
-function loadDesign(f) {
-  file = f;
-  const url = URL.createObjectURL(f);
-  const img = new Image();
-  img.onload = () => {
-    if (designTex) gl.deleteTexture(designTex);
-    designTex = loadTexture(url, render);
-    document.getElementById('uploadOverlay').classList.add('hidden');
-    document.getElementById('glCanvas').classList.add('has-design');
-    document.getElementById('renderBtn').disabled = false;
-  };
-  img.src = url;
-}
-
-// Drag on canvas
-let dragging=false, dsx, dsy, dcx, dcy;
-const canvas = document.getElementById('glCanvas');
-
-canvas.addEventListener('mousedown', e => {
-  if (!designTex) return;
+// Drag
+let dragging=false,dsx,dsy,dcx,dcy;
+canvas.addEventListener('mousedown',e=>{
+  if(!designImg)return;
   dragging=true; dsx=e.offsetX; dsy=e.offsetY; dcx=pos.cx; dcy=pos.cy;
   e.preventDefault();
 });
-document.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  const dx = (e.offsetX - dsx) / DISP_W;
-  const dy = (e.offsetY - dsy) / DISP_H;
-  pos.cx = Math.max(0,Math.min(1, dcx+dx));
-  pos.cy = Math.max(0,Math.min(1, dcy+dy));
-  syncSliders(); render();
+document.addEventListener('mousemove',e=>{
+  if(!dragging)return;
+  const rect=canvas.getBoundingClientRect();
+  const dx=(e.clientX-rect.left-dsx)/CW;
+  const dy=(e.clientY-rect.top-dsy)/CH;
+  pos.cx=Math.max(0,Math.min(1,dcx+dx));
+  pos.cy=Math.max(0,Math.min(1,dcy+dy));
+  syncSliders(); drawPreview();
 });
-document.addEventListener('mouseup', () => dragging=false);
+document.addEventListener('mouseup',()=>dragging=false);
 
-// Scroll to resize
-canvas.addEventListener('wheel', e => {
-  if (!designTex) return;
-  pos.size = Math.max(0.05, Math.min(0.9, pos.size - e.deltaY*0.001));
-  syncSliders(); render();
+// Scroll = resize
+canvas.addEventListener('wheel',e=>{
+  if(!designImg)return;
+  pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));
+  syncSliders(); drawPreview();
   e.preventDefault();
-}, {passive:false});
+},{passive:false});
 
-// Render button
-document.getElementById('renderBtn').addEventListener('click', async () => {
-  if (!file) return;
-  const half = pos.size/2;
-  const sx = Math.round((pos.cx - half) * SRC_W);
-  const sy = Math.round((pos.cy - half) * SRC_H);
-  const sw = Math.round(pos.size * SRC_W);
-  const sh = Math.round(pos.size * SRC_H);
+// Generate
+document.getElementById('renderBtn').addEventListener('click',async()=>{
+  if(!file)return;
+  const half=pos.size/2;
+  const sx=Math.round((pos.cx-half)*SRC_W);
+  const sy=Math.round((pos.cy-half)*SRC_H);
+  const sw=Math.round(pos.size*SRC_W);
+  const sh=Math.round(pos.size*SRC_H);
 
   document.getElementById('renderBtn').disabled=true;
   const st=document.getElementById('status');
@@ -339,10 +292,10 @@ document.getElementById('renderBtn').addEventListener('click', async () => {
   form.append('w',sw); form.append('h',sh);
 
   try {
-    const res = await fetch('/render',{method:'POST',body:form});
-    if (!res.ok) throw new Error('Error '+res.status);
-    const url = URL.createObjectURL(await res.blob());
-    const ri = document.getElementById('resultImg');
+    const res=await fetch('/render',{method:'POST',body:form});
+    if(!res.ok) throw new Error('Error '+res.status);
+    const url=URL.createObjectURL(await res.blob());
+    const ri=document.getElementById('resultImg');
     ri.src=url; ri.classList.add('show');
     const dl=document.getElementById('dlBtn'); dl.href=url; dl.classList.add('show');
     st.className='status ok'; st.textContent='✓ Done';
