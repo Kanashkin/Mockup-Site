@@ -6,154 +6,83 @@
   <title>Mockup Generator</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --bg: #0f0f0f; --surface: #1a1a1a; --border: #2a2a2a;
-      --accent: #e8ff47; --text: #f0f0f0; --muted: #555;
-    }
-    body {
-      background: var(--bg); color: var(--text);
-      font-family: system-ui, sans-serif;
-      min-height: 100vh; display: flex; flex-direction: column;
-      align-items: center; padding: 32px 16px; gap: 24px;
-    }
-    h1 { font-size: 30px; font-weight: 700; letter-spacing: -1px; }
-    h1 span { color: var(--accent); }
-    .sub { color: var(--muted); font-size: 14px; margin-top: 4px; text-align:center; }
+    :root { --bg:#0f0f0f; --surface:#1a1a1a; --border:#2a2a2a; --accent:#e8ff47; --text:#f0f0f0; --muted:#555; }
+    body { background:var(--bg); color:var(--text); font-family:system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:28px 16px; gap:20px; }
+    h1 { font-size:28px; font-weight:700; letter-spacing:-1px; }
+    h1 span { color:var(--accent); }
+    .sub { color:var(--muted); font-size:13px; margin-top:4px; text-align:center; }
+    .main { display:flex; gap:24px; width:100%; max-width:1040px; align-items:flex-start; }
 
-    .main { display: flex; gap: 28px; width: 100%; max-width: 1060px; align-items: flex-start; }
+    /* WebGL canvas */
+    .preview-wrap { flex:0 0 auto; position:relative; width:460px; }
+    #glCanvas { width:460px; height:690px; border-radius:12px; display:block; cursor:crosshair; }
+    #glCanvas.has-design { cursor:move; }
 
-    /* Canvas preview */
-    .preview-wrap {
-      flex: 0 0 auto;
-      position: relative;
-      width: 460px;
-    }
-    #previewCanvas {
-      width: 460px;
-      height: 690px;
-      border-radius: 12px;
-      display: block;
-      cursor: crosshair;
-    }
-    #previewCanvas.has-design { cursor: move; }
-
-    /* Upload overlay when no design */
+    /* Upload overlay */
     #uploadOverlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      border-radius: 12px;
-      background: rgba(0,0,0,0.45);
-      cursor: pointer;
-      transition: background .2s;
+      position:absolute; inset:0; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:8px;
+      border-radius:12px; background:rgba(0,0,0,0.5); cursor:pointer;
     }
-    #uploadOverlay:hover { background: rgba(0,0,0,0.6); }
-    #uploadOverlay input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width:100%; height:100%; }
-    #uploadOverlay .icon { font-size: 40px; }
-    #uploadOverlay .txt { font-size: 14px; color: #fff; font-weight: 600; }
-    #uploadOverlay .sub2 { font-size: 12px; color: rgba(255,255,255,0.5); }
-    #uploadOverlay.hidden { display: none; }
+    #uploadOverlay input { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+    #uploadOverlay .icon { font-size:38px; }
+    #uploadOverlay .txt { font-size:14px; color:#fff; font-weight:600; }
+    #uploadOverlay .sub2 { font-size:12px; color:rgba(255,255,255,0.4); }
+    #uploadOverlay.hidden { display:none; }
 
     /* Sidebar */
-    .sidebar { flex: 1; display: flex; flex-direction: column; gap: 14px; }
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .card-title {
-      padding: 10px 16px; border-bottom: 1px solid var(--border);
-      font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
-      text-transform: uppercase; color: var(--muted);
-    }
-    .card-body { padding: 16px; }
-
-    .sliders { display: flex; flex-direction: column; gap: 12px; }
-    .row { display: flex; align-items: center; gap: 10px; font-size: 13px; }
-    .row label { width: 52px; color: var(--muted); font-size: 12px; }
-    .row input[type=range] { flex: 1; accent-color: var(--accent); }
-    .row span { width: 36px; text-align: right; font-size: 12px; color: var(--text); }
-
-    .hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
-
-    .btn {
-      width: 100%; padding: 13px; background: var(--accent);
-      color: #111; border: none; border-radius: 8px;
-      font-size: 15px; font-weight: 700; cursor: pointer; transition: opacity .2s;
-    }
-    .btn:disabled { opacity: .3; cursor: not-allowed; }
-    .btn:hover:not(:disabled) { opacity: .85; }
-    .btn-secondary {
-      width: 100%; padding: 10px; background: transparent;
-      color: var(--muted); border: 1px solid var(--border); border-radius: 8px;
-      font-size: 13px; cursor: pointer; transition: border-color .2s, color .2s;
-      margin-top: 8px;
-    }
-    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-    .dl {
-      display: none; width: 100%; margin-top: 10px; padding: 11px;
-      background: transparent; color: var(--accent);
-      border: 1px solid var(--accent); border-radius: 8px;
-      font-size: 13px; font-weight: 600; text-align: center; text-decoration: none;
-    }
-    .dl.show { display: block; }
-    #resultImg { width: 100%; border-radius: 8px; display: none; margin-top: 8px; }
-    #resultImg.show { display: block; }
-    .status { margin-top: 8px; font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; }
-    .status.err { color: #f66; }
-    .status.ok  { color: var(--accent); }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spin {
-      display: inline-block; width: 11px; height: 11px;
-      border: 2px solid rgba(232,255,71,.3); border-top-color: var(--accent);
-      border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 4px;
-    }
+    .sidebar { flex:1; display:flex; flex-direction:column; gap:14px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+    .card-title { padding:10px 16px; border-bottom:1px solid var(--border); font-size:11px; font-weight:600; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); }
+    .card-body { padding:16px; }
+    .sliders { display:flex; flex-direction:column; gap:12px; }
+    .row { display:flex; align-items:center; gap:10px; font-size:13px; }
+    .row label { width:48px; color:var(--muted); font-size:12px; }
+    .row input[type=range] { flex:1; accent-color:var(--accent); }
+    .row span { width:36px; text-align:right; font-size:12px; }
+    .hint { font-size:11px; color:var(--muted); margin-top:10px; line-height:1.5; }
+    .btn { width:100%; padding:13px; background:var(--accent); color:#111; border:none; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; transition:opacity .2s; }
+    .btn:disabled { opacity:.3; cursor:not-allowed; }
+    .btn:hover:not(:disabled) { opacity:.85; }
+    .btn2 { width:100%; padding:10px; background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:8px; font-size:13px; cursor:pointer; margin-top:8px; transition:border-color .2s,color .2s; }
+    .btn2:hover { border-color:var(--accent); color:var(--accent); }
+    .dl { display:none; width:100%; margin-top:10px; padding:11px; background:transparent; color:var(--accent); border:1px solid var(--accent); border-radius:8px; font-size:13px; font-weight:600; text-align:center; text-decoration:none; }
+    .dl.show { display:block; }
+    #resultImg { width:100%; border-radius:8px; display:none; margin-top:8px; }
+    #resultImg.show { display:block; }
+    .status { margin-top:8px; font-size:12px; color:var(--muted); text-align:center; min-height:16px; }
+    .status.err { color:#f66; } .status.ok { color:var(--accent); }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spin { display:inline-block; width:11px; height:11px; border:2px solid rgba(232,255,71,.3); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle; margin-right:4px; }
   </style>
 </head>
 <body>
 
 <h1>T-Shirt <span>Mockup</span></h1>
-<p class="sub">Upload your design — position it live on the shirt</p>
+<p class="sub">Upload your design — see it warped on the shirt in real time</p>
 
 <div class="main">
-
-  <!-- Live preview canvas -->
   <div class="preview-wrap">
-    <canvas id="previewCanvas" width="460" height="690"></canvas>
+    <canvas id="glCanvas" width="920" height="1380"></canvas>
     <div id="uploadOverlay">
       <input type="file" id="fileInput" accept="image/*">
       <div class="icon">🎨</div>
       <div class="txt">Click to upload design</div>
-      <div class="sub2">PNG, JPG — transparency supported</div>
+      <div class="sub2">PNG with transparency works best</div>
     </div>
   </div>
 
-  <!-- Sidebar -->
   <div class="sidebar">
-
-    <div class="card" id="adjustCard">
+    <div class="card">
       <div class="card-title">Position & Size</div>
       <div class="card-body">
         <div class="sliders">
-          <div class="row">
-            <label>Size</label>
-            <input type="range" id="sSize" min="20" max="100" value="45">
-            <span id="vSize">45%</span>
-          </div>
-          <div class="row">
-            <label>X</label>
-            <input type="range" id="sX" min="0" max="100" value="50">
-            <span id="vX">50%</span>
-          </div>
-          <div class="row">
-            <label>Y</label>
-            <input type="range" id="sY" min="0" max="100" value="38">
-            <span id="vY">38%</span>
-          </div>
+          <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
+          <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
+          <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="35"><span id="vY">35%</span></div>
         </div>
-        <p class="hint">💡 Drag design directly on the shirt, or use sliders</p>
-        <button class="btn-secondary" id="resetBtn">↺ Reset position</button>
+        <p class="hint">💡 Drag design directly on the shirt preview</p>
+        <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
     </div>
 
@@ -162,259 +91,267 @@
       <div class="card-body">
         <button class="btn" id="renderBtn" disabled>Generate High-Res →</button>
         <div class="status" id="status"></div>
-        <img id="resultImg" alt="mockup result">
+        <img id="resultImg" alt="result">
         <a class="dl" id="dlBtn" download="mockup.png">↓ Download PNG</a>
       </div>
     </div>
-
   </div>
 </div>
 
 <script>
-  const canvas  = document.getElementById('previewCanvas');
-  const ctx     = canvas.getContext('2d');
-  const overlay = document.getElementById('uploadOverlay');
-  const renderBtn = document.getElementById('renderBtn');
-  const status    = document.getElementById('status');
-  const resultImg = document.getElementById('resultImg');
-  const dlBtn     = document.getElementById('dlBtn');
-  const sSize = document.getElementById('sSize'), vSize = document.getElementById('vSize');
-  const sX    = document.getElementById('sX'),    vX    = document.getElementById('vX');
-  const sY    = document.getElementById('sY'),    vY    = document.getElementById('vY');
+const CW = 920, CH = 1380; // canvas pixel size (2x for retina)
+const DISP_W = 460, DISP_H = 690; // CSS display size
+const SRC_W = 2342, SRC_H = 2616;
 
-  const CW = 460, CH = 690; // canvas display size
-  // Source space (warp coords)
-  const SRC_W = 2342, SRC_H = 2616;
+let gl, shirtTex, designTex, warpProgram, flatProgram, warpData;
+let file = null;
+let pos = { cx: 0.5, cy: 0.35, size: 0.35 };
 
-  let shirtImg  = new Image();
-  let designImg = null;
-  let file      = null;
+// Load warp data
+fetch('/warp_data.json').then(r => r.json()).then(d => {
+  warpData = d;
+  initGL();
+});
 
-  // Position state (0–1 normalized, center of design)
-  let pos = { cx: 0.5, cy: 0.38, size: 0.45 };
+function initGL() {
+  const canvas = document.getElementById('glCanvas');
+  gl = canvas.getContext('webgl', { premultipliedAlpha: false });
+  if (!gl) { alert('WebGL not supported'); return; }
 
-  // Load shirt preview
-  shirtImg.src = '/shirt_preview.png';
-  shirtImg.onload = () => draw();
+  // Compile shaders
+  warpProgram = makeProgram(
+    // Vertex: warp mesh
+    `attribute vec2 aPosition; attribute vec2 aDesignUV; attribute vec2 aShirtUV;
+     varying vec2 vDesignUV; varying vec2 vShirtUV;
+     void main() { gl_Position = vec4(aPosition, 0, 1); vDesignUV = aDesignUV; vShirtUV = aShirtUV; }`,
+    // Fragment: multiply blend
+    `precision mediump float;
+     uniform sampler2D uShirt; uniform sampler2D uDesign;
+     uniform float uHasDesign;
+     varying vec2 vDesignUV; varying vec2 vShirtUV;
+     void main() {
+       vec4 shirt = texture2D(uShirt, vShirtUV);
+       if (uHasDesign < 0.5) { gl_FragColor = shirt; return; }
+       vec4 design = texture2D(uDesign, vDesignUV);
+       // Multiply blend
+       vec3 blended = shirt.rgb * (design.rgb * design.a + vec3(1.0) * (1.0 - design.a));
+       gl_FragColor = vec4(blended, 1.0);
+     }`
+  );
 
-  // Upload
-  document.getElementById('fileInput').addEventListener('change', e => {
-    if (e.target.files[0]) loadDesign(e.target.files[0]);
-  });
+  // Load shirt texture
+  shirtTex = loadTexture('/shirt_preview.png', () => render());
 
-  function loadDesign(f) {
-    file = f;
-    const img = new Image();
-    img.onload = () => {
-      designImg = img;
-      overlay.classList.add('hidden');
-      canvas.classList.add('has-design');
-      renderBtn.disabled = false;
-      draw();
-    };
-    img.src = URL.createObjectURL(f);
+  buildMesh();
+}
+
+function makeProgram(vsrc, fsrc) {
+  const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, vsrc); gl.compileShader(vs);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER); gl.shaderSource(fs, fsrc); gl.compileShader(fs);
+  const prog = gl.createProgram(); gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+  return prog;
+}
+
+function loadTexture(url, cb) {
+  const tex = gl.createTexture();
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (cb) cb();
+  };
+  img.src = url; return tex;
+}
+
+let posVBO, designVBO, shirtVBO, indexVBO;
+
+function buildMesh() {
+  if (!warpData) return;
+  const gc = warpData.grid_canvas; // NDC positions
+  const gd = warpData.grid_design; // design UV (0-1)
+  const gs = warpData.grid_shirt;  // shirt UV (0-1)
+  const idx = warpData.indices;
+
+  // We'll override design UVs per frame based on pos
+  posVBO    = makeBuffer(new Float32Array(gc.flat()));
+  designVBO = makeBuffer(new Float32Array(gd.flat())); // placeholder
+  shirtVBO  = makeBuffer(new Float32Array(gs.flat()));
+  indexVBO  = makeIndexBuffer(new Uint16Array(idx));
+}
+
+function makeBuffer(data) {
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+  return buf;
+}
+
+function makeIndexBuffer(data) {
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  return buf;
+}
+
+function updateDesignUVs() {
+  if (!warpData) return;
+  // For each grid point (in design UV space 0-1),
+  // remap so that pos.cx,cy is center and pos.size controls scale
+  const gd = warpData.grid_design;
+  const newUVs = [];
+  for (const [du, dv] of gd) {
+    // du,dv are in 0-1 source space
+    // We want to place design at pos.cx, pos.cy with size pos.size
+    // Design UV: map from source space to design image space
+    const half = pos.size / 2;
+    const u = (du - pos.cx) / pos.size + 0.5;
+    const v = (dv - pos.cy) / pos.size + 0.5;
+    newUVs.push(u, v);
   }
+  gl.bindBuffer(gl.ARRAY_BUFFER, designVBO);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(newUVs), gl.DYNAMIC_DRAW);
+}
 
-  // Draw everything
-  function draw() {
-    ctx.clearRect(0, 0, CW, CH);
+function render() {
+  if (!gl || !warpData) return;
+  gl.viewport(0, 0, CW, CH);
+  gl.clearColor(0.1, 0.1, 0.1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // Draw shirt
-    if (shirtImg.complete && shirtImg.naturalWidth) {
-      ctx.drawImage(shirtImg, 0, 0, CW, CH);
-    }
+  gl.useProgram(warpProgram);
 
-    if (!designImg) return;
+  // Bind position
+  gl.bindBuffer(gl.ARRAY_BUFFER, posVBO);
+  const aPos = gl.getAttribLocation(warpProgram, 'aPosition');
+  gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
 
-    // Design size & position in canvas pixels
-    const dSize = pos.size * CW;
-    const dx = pos.cx * CW - dSize / 2;
-    const dy = pos.cy * CH - dSize / 2;
+  // Update and bind design UVs
+  if (designTex) updateDesignUVs();
+  gl.bindBuffer(gl.ARRAY_BUFFER, designVBO);
+  const aDUV = gl.getAttribLocation(warpProgram, 'aDesignUV');
+  gl.enableVertexAttribArray(aDUV); gl.vertexAttribPointer(aDUV, 2, gl.FLOAT, false, 0, 0);
 
-    // Draw design with multiply blend
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.drawImage(designImg, dx, dy, dSize, dSize);
-    ctx.restore();
+  // Bind shirt UVs
+  gl.bindBuffer(gl.ARRAY_BUFFER, shirtVBO);
+  const aSUV = gl.getAttribLocation(warpProgram, 'aShirtUV');
+  gl.enableVertexAttribArray(aSUV); gl.vertexAttribPointer(aSUV, 2, gl.FLOAT, false, 0, 0);
 
-    // Draw selection border
-    ctx.save();
-    ctx.strokeStyle = '#e8ff47';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 3]);
-    ctx.strokeRect(dx, dy, dSize, dSize);
-    ctx.restore();
+  // Textures
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, shirtTex);
+  gl.uniform1i(gl.getUniformLocation(warpProgram, 'uShirt'), 0);
 
-    // Draw resize handle
-    ctx.fillStyle = '#e8ff47';
-    ctx.fillRect(dx + dSize - 8, dy + dSize - 8, 14, 14);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, designTex || shirtTex);
+  gl.uniform1i(gl.getUniformLocation(warpProgram, 'uDesign'), 1);
+  gl.uniform1f(gl.getUniformLocation(warpProgram, 'uHasDesign'), designTex ? 1.0 : 0.0);
+
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+  // Draw
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexVBO);
+  gl.drawElements(gl.TRIANGLES, warpData.indices.length, gl.UNSIGNED_SHORT, 0);
+}
+
+// Sliders
+const sSize=document.getElementById('sSize'), vSize=document.getElementById('vSize');
+const sX=document.getElementById('sX'), vX=document.getElementById('vX');
+const sY=document.getElementById('sY'), vY=document.getElementById('vY');
+
+function syncSliders() {
+  sSize.value=Math.round(pos.size*100); vSize.textContent=sSize.value+'%';
+  sX.value=Math.round(pos.cx*100);     vX.textContent=sX.value+'%';
+  sY.value=Math.round(pos.cy*100);     vY.textContent=sY.value+'%';
+}
+sSize.addEventListener('input', () => { pos.size=sSize.value/100; vSize.textContent=sSize.value+'%'; render(); });
+sX.addEventListener('input',    () => { pos.cx=sX.value/100;     vX.textContent=sX.value+'%';     render(); });
+sY.addEventListener('input',    () => { pos.cy=sY.value/100;     vY.textContent=sY.value+'%';     render(); });
+document.getElementById('resetBtn').addEventListener('click', () => {
+  pos={cx:0.5,cy:0.35,size:0.35}; syncSliders(); render();
+});
+
+// Upload
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (e.target.files[0]) loadDesign(e.target.files[0]);
+});
+
+function loadDesign(f) {
+  file = f;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    if (designTex) gl.deleteTexture(designTex);
+    designTex = loadTexture(url, render);
+    document.getElementById('uploadOverlay').classList.add('hidden');
+    document.getElementById('glCanvas').classList.add('has-design');
+    document.getElementById('renderBtn').disabled = false;
+  };
+  img.src = url;
+}
+
+// Drag on canvas
+let dragging=false, dsx, dsy, dcx, dcy;
+const canvas = document.getElementById('glCanvas');
+
+canvas.addEventListener('mousedown', e => {
+  if (!designTex) return;
+  dragging=true; dsx=e.offsetX; dsy=e.offsetY; dcx=pos.cx; dcy=pos.cy;
+  e.preventDefault();
+});
+document.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const dx = (e.offsetX - dsx) / DISP_W;
+  const dy = (e.offsetY - dsy) / DISP_H;
+  pos.cx = Math.max(0,Math.min(1, dcx+dx));
+  pos.cy = Math.max(0,Math.min(1, dcy+dy));
+  syncSliders(); render();
+});
+document.addEventListener('mouseup', () => dragging=false);
+
+// Scroll to resize
+canvas.addEventListener('wheel', e => {
+  if (!designTex) return;
+  pos.size = Math.max(0.05, Math.min(0.9, pos.size - e.deltaY*0.001));
+  syncSliders(); render();
+  e.preventDefault();
+}, {passive:false});
+
+// Render button
+document.getElementById('renderBtn').addEventListener('click', async () => {
+  if (!file) return;
+  const half = pos.size/2;
+  const sx = Math.round((pos.cx - half) * SRC_W);
+  const sy = Math.round((pos.cy - half) * SRC_H);
+  const sw = Math.round(pos.size * SRC_W);
+  const sh = Math.round(pos.size * SRC_H);
+
+  document.getElementById('renderBtn').disabled=true;
+  const st=document.getElementById('status');
+  st.className='status'; st.innerHTML='<span class="spin"></span>Rendering…';
+  document.getElementById('resultImg').classList.remove('show');
+  document.getElementById('dlBtn').classList.remove('show');
+
+  const form=new FormData();
+  form.append('file',file); form.append('x',sx); form.append('y',sy);
+  form.append('w',sw); form.append('h',sh);
+
+  try {
+    const res = await fetch('/render',{method:'POST',body:form});
+    if (!res.ok) throw new Error('Error '+res.status);
+    const url = URL.createObjectURL(await res.blob());
+    const ri = document.getElementById('resultImg');
+    ri.src=url; ri.classList.add('show');
+    const dl=document.getElementById('dlBtn'); dl.href=url; dl.classList.add('show');
+    st.className='status ok'; st.textContent='✓ Done';
+  } catch(err) {
+    st.className='status err'; st.textContent='✗ '+err.message;
+  } finally {
+    document.getElementById('renderBtn').disabled=false;
   }
-
-  // Sliders → update pos → draw
-  sSize.addEventListener('input', () => {
-    pos.size = +sSize.value / 100;
-    vSize.textContent = sSize.value + '%';
-    draw();
-  });
-  sX.addEventListener('input', () => {
-    pos.cx = +sX.value / 100;
-    vX.textContent = sX.value + '%';
-    draw();
-  });
-  sY.addEventListener('input', () => {
-    pos.cy = +sY.value / 100;
-    vY.textContent = sY.value + '%';
-    draw();
-  });
-
-  // Sync sliders from pos
-  function syncSliders() {
-    sSize.value = Math.round(pos.size * 100); vSize.textContent = sSize.value + '%';
-    sX.value    = Math.round(pos.cx   * 100); vX.textContent    = sX.value + '%';
-    sY.value    = Math.round(pos.cy   * 100); vY.textContent    = sY.value + '%';
-  }
-
-  // Reset
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    pos = { cx: 0.5, cy: 0.38, size: 0.45 };
-    syncSliders();
-    draw();
-  });
-
-  // ── Drag on canvas ──────────────────────────────────────────────────────────
-  let dragging = false, resizing = false;
-  let dragStartX, dragStartY, dragStartCx, dragStartCy;
-  let resizeStartX, resizeStartSize;
-
-  function getDesignRect() {
-    const dSize = pos.size * CW;
-    return {
-      x: pos.cx * CW - dSize / 2,
-      y: pos.cy * CH - dSize / 2,
-      s: dSize
-    };
-  }
-
-  function isOnHandle(mx, my) {
-    const r = getDesignRect();
-    return mx >= r.x + r.s - 8 && mx <= r.x + r.s + 6 &&
-           my >= r.y + r.s - 8 && my <= r.y + r.s + 6;
-  }
-
-  function isOnDesign(mx, my) {
-    const r = getDesignRect();
-    return mx >= r.x && mx <= r.x + r.s && my >= r.y && my <= r.y + r.s;
-  }
-
-  canvas.addEventListener('mousedown', e => {
-    if (!designImg) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (CW / rect.width);
-    const my = (e.clientY - rect.top)  * (CH / rect.height);
-    if (isOnHandle(mx, my)) {
-      resizing = true;
-      resizeStartX    = mx;
-      resizeStartSize = pos.size;
-    } else if (isOnDesign(mx, my)) {
-      dragging = true;
-      dragStartX  = mx; dragStartY  = my;
-      dragStartCx = pos.cx; dragStartCy = pos.cy;
-    }
-    e.preventDefault();
-  });
-
-  document.addEventListener('mousemove', e => {
-    if (!dragging && !resizing) return;
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (CW / rect.width);
-    const my = (e.clientY - rect.top)  * (CH / rect.height);
-
-    if (dragging) {
-      pos.cx = Math.max(0, Math.min(1, dragStartCx + (mx - dragStartX) / CW));
-      pos.cy = Math.max(0, Math.min(1, dragStartCy + (my - dragStartY) / CH));
-    } else if (resizing) {
-      const delta = (mx - resizeStartX) / CW;
-      pos.size = Math.max(0.1, Math.min(1, resizeStartSize + delta * 2));
-    }
-    syncSliders();
-    draw();
-  });
-
-  document.addEventListener('mouseup', () => { dragging = false; resizing = false; });
-
-  // Touch support
-  canvas.addEventListener('touchstart', e => {
-    if (!designImg) return;
-    const rect = canvas.getBoundingClientRect();
-    const t = e.touches[0];
-    const mx = (t.clientX - rect.left) * (CW / rect.width);
-    const my = (t.clientY - rect.top)  * (CH / rect.height);
-    if (isOnDesign(mx, my)) {
-      dragging = true;
-      dragStartX=mx; dragStartY=my; dragStartCx=pos.cx; dragStartCy=pos.cy;
-    }
-    e.preventDefault();
-  }, {passive:false});
-  canvas.addEventListener('touchmove', e => {
-    if (!dragging) return;
-    const rect = canvas.getBoundingClientRect();
-    const t = e.touches[0];
-    const mx = (t.clientX - rect.left) * (CW / rect.width);
-    const my = (t.clientY - rect.top)  * (CH / rect.height);
-    pos.cx = Math.max(0,Math.min(1, dragStartCx + (mx-dragStartX)/CW));
-    pos.cy = Math.max(0,Math.min(1, dragStartCy + (my-dragStartY)/CH));
-    syncSliders(); draw();
-    e.preventDefault();
-  }, {passive:false});
-  canvas.addEventListener('touchend', () => dragging=false);
-
-  // ── Render ──────────────────────────────────────────────────────────────────
-  renderBtn.addEventListener('click', async () => {
-    if (!file) return;
-
-    // Convert normalized pos → source space coords
-    const dSizePx = pos.size * CW;
-    const dx = pos.cx * CW - dSizePx / 2;
-    const dy = pos.cy * CH - dSizePx / 2;
-
-    const scaleX = SRC_W / CW;
-    const scaleY = SRC_H / CH;
-
-    const sx = Math.round(dx    * scaleX);
-    const sy = Math.round(dy    * scaleY);
-    const sw = Math.round(dSizePx * scaleX);
-    const sh = Math.round(dSizePx * scaleY);
-
-    renderBtn.disabled = true;
-    status.className = 'status';
-    status.innerHTML = '<span class="spin"></span>Rendering high-res…';
-    resultImg.classList.remove('show');
-    dlBtn.classList.remove('show');
-
-    const form = new FormData();
-    form.append('file', file);
-    form.append('x', sx);
-    form.append('y', sy);
-    form.append('w', sw);
-    form.append('h', sh);
-
-    try {
-      const res = await fetch('/render', { method: 'POST', body: form });
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const url = URL.createObjectURL(await res.blob());
-      resultImg.src = url;
-      resultImg.classList.add('show');
-      dlBtn.href = url;
-      dlBtn.classList.add('show');
-      status.className = 'status ok';
-      status.textContent = '✓ Done';
-    } catch (err) {
-      status.className = 'status err';
-      status.textContent = '✗ ' + err.message;
-    } finally {
-      renderBtn.disabled = false;
-    }
-  });
+});
 </script>
 </body>
 </html>
