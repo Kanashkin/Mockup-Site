@@ -13,15 +13,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 MOCKUP_DIR = os.path.join(os.path.dirname(__file__), "mockup_package")
 
-BLEND_FNS = {
-    "BlendMode.SOFT_LIGHT": lambda b, bl: np.clip(np.where(
-        bl <= 0.5, b - (1-2*bl)*b*(1-b),
-        b + (2*bl-1)*(np.where(b<=0.25, ((16*b-12)*b+4)*b, np.sqrt(np.maximum(b,0)))-b)), 0, 1),
-    "BlendMode.MULTIPLY": lambda b, bl: b * bl,
-    "BlendMode.SCREEN":   lambda b, bl: 1 - (1-b)*(1-bl),
-    "BlendMode.OVERLAY":  lambda b, bl: np.where(b<=0.5, 2*b*bl, 1-2*(1-b)*(1-bl)),
-}
-
 class MockupEngine:
     def __init__(self, mockup_dir):
         print("Loading mockup package...")
@@ -32,13 +23,11 @@ class MockupEngine:
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
 
-        self.shirt_arr = np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png")).convert("RGB")).astype(np.float32) / 255
-        self.mask_arr  = np.array(Image.open(os.path.join(mockup_dir, "tshirt_mask.png")).convert("L")).astype(np.float32) / 255
-
-        self.overlays = []
-        for ov in pkg["overlays"]:
-            img = np.array(Image.open(os.path.join(mockup_dir, ov["file"])).convert("RGB")).astype(np.float32) / 255
-            self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
+        # Just the background photo - no overlays
+        self.shirt_arr = np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png"))
+                          .convert("RGB")).astype(np.float32) / 255
+        self.mask_arr  = np.array(Image.open(os.path.join(mockup_dir, "tshirt_mask.png"))
+                          .convert("L")).astype(np.float32) / 255
 
         src_w = warp["bounds"]["right"]
         src_h = warp["bounds"]["bottom"]
@@ -75,7 +64,6 @@ class MockupEngine:
         print("Ready.")
 
     def render(self, design_img, x=0, y=0, w=None, h=None):
-        # Place design at specific position in source space
         sw, sh = int(self.src_w), int(self.src_h)
         if w is None: w = sw
         if h is None: h = sh
@@ -94,14 +82,10 @@ class MockupEngine:
         warped[fi//self.canvas_w, fi%self.canvas_w] = design_arr[ny[valid].astype(int), nx[valid].astype(int)]
         warped[:,:,3] = warped[:,:,3] * self.mask_arr
 
+        # Multiply blend — design darkens shirt where it has color
         alpha      = warped[:,:,3:4] / 255
         design_rgb = warped[:,:,:3]  / 255
         result     = self.shirt_arr * (1-alpha) + self.shirt_arr * design_rgb * alpha
-
-        for img, opacity, blend_mode in self.overlays:
-            fn = BLEND_FNS.get(blend_mode)
-            if fn:
-                result = result*(1-opacity) + fn(result, img)*opacity
 
         return Image.fromarray((np.clip(result,0,1)*255).astype(np.uint8))
 
