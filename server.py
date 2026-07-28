@@ -13,6 +13,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 MOCKUP_DIR = os.path.join(os.path.dirname(__file__), "mockup_package")
 
+def soft_light(b,bl):
+    return np.clip(np.where(bl<=0.5, b-(1-2*bl)*b*(1-b),
+        b+(2*bl-1)*(np.where(b<=0.25,((16*b-12)*b+4)*b,np.sqrt(np.maximum(b,0)))-b)),0,1)
+def blend_multiply(b,bl): return b*bl
+def blend_screen(b,bl):   return 1-(1-b)*(1-bl)
+def blend_overlay(b,bl):  return np.where(b<=0.5,2*b*bl,1-2*(1-b)*(1-bl))
+
+BLEND_FNS = {
+    "BlendMode.SOFT_LIGHT": soft_light,
+    "BlendMode.MULTIPLY":   blend_multiply,
+    "BlendMode.SCREEN":     blend_screen,
+    "BlendMode.OVERLAY":    blend_overlay,
+}
+
 class MockupEngine:
     def __init__(self, mockup_dir):
         print("Loading mockup package...")
@@ -23,15 +37,35 @@ class MockupEngine:
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
 
-        self.shirt_arr  = np.array(Image.open(os.path.join(mockup_dir, "shirt_base.png")).convert("RGB")).astype(np.float32)/255
-        self.mask_arr   = np.array(Image.open(os.path.join(mockup_dir, "tshirt_mask.png")).convert("L")).astype(np.float32)/255
-        self.shirt_full_mask = np.array(Image.open(os.path.join(mockup_dir, "shirt_full_mask.png")).convert("L")).astype(np.float32)/255
+        # Base shirt photo (Background layer, clean)
+        self.shirt_arr = np.array(
+            Image.open(os.path.join(mockup_dir, "shirt_base.png")).convert("RGB")
+        ).astype(np.float32) / 255
 
+        # Mask for design placement (print zone)
+        self.mask_arr = np.array(
+            Image.open(os.path.join(mockup_dir, "tshirt_mask.png")).convert("L")
+        ).astype(np.float32) / 255
+
+        # Full shirt mask (for recoloring)
+        self.shirt_full_mask = np.array(
+            Image.open(os.path.join(mockup_dir, "shirt_full_mask.png")).convert("L")
+        ).astype(np.float32) / 255
+        self.shirt_full_mask_3d = self.shirt_full_mask[:,:,np.newaxis]
+
+        # Overlay layers with alpha
+        self.overlays = []
+        for ov in pkg["overlays"]:
+            img = np.array(
+                Image.open(os.path.join(mockup_dir, ov["file"])).convert("RGBA")
+            ).astype(np.float32) / 255
+            self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
+
+        # Warp setup
         src_w = warp["bounds"]["right"]
         src_h = warp["bounds"]["bottom"]
         self.src_w = src_w
         self.src_h = src_h
-
         tx = warp["transform"]
         canvas_corners = np.float32([[tx[0],tx[1]],[tx[2],tx[3]],[tx[4],tx[5]],[tx[6],tx[7]]])
         src_corners    = np.float32([[0,0],[src_w,0],[src_w,src_h],[0,src_h]])
@@ -46,45 +80,42 @@ class MockupEngine:
         displaced = np.column_stack([mx.ravel(),my.ravel()])
 
         print("Precomputing warp map...")
-        cw,ch = self.canvas_w,self.canvas_h
-        ys,xs = np.mgrid[0:ch,0:cw]
-        cp  = np.column_stack([xs.ravel().astype(np.float64),ys.ravel().astype(np.float64)])
-        cp_h = np.concatenate([cp,np.ones((len(cp),1))],axis=1)
-        sp_h = (H_inv@cp_h.T).T
+        cw, ch = self.canvas_w, self.canvas_h
+        ys, xs = np.mgrid[0:ch, 0:cw]
+        cp  = np.column_stack([xs.ravel().astype(np.float64), ys.ravel().astype(np.float64)])
+        cp_h = np.concatenate([cp, np.ones((len(cp),1))], axis=1)
+        sp_h = (H_inv @ cp_h.T).T
         src_x = sp_h[:,0]/sp_h[:,2]
         src_y = sp_h[:,1]/sp_h[:,2]
         in_r  = (src_x>=-300)&(src_x<=src_w+300)&(src_y>=-300)&(src_y<=src_h+300)
         ridx  = np.where(in_r)[0]
-        rsp   = np.column_stack([src_x[in_r],src_y[in_r]])
-        self._rx   = griddata(displaced,reg_x,rsp,method="cubic")
-        self._ry   = griddata(displaced,reg_y,rsp,method="cubic")
+        rsp   = np.column_stack([src_x[in_r], src_y[in_r]])
+        self._rx   = griddata(displaced, reg_x, rsp, method="cubic")
+        self._ry   = griddata(displaced, reg_y, rsp, method="cubic")
         self._ridx = ridx
         print("Ready.")
 
-    def recolor(self, shirt, color_hex):
-        """Recolor shirt using luminance * target color."""
-        r = int(color_hex[1:3],16)/255
-        g = int(color_hex[3:5],16)/255
-        b = int(color_hex[5:7],16)/255
-        lum = 0.299*shirt[:,:,0] + 0.587*shirt[:,:,1] + 0.114*shirt[:,:,2]
-        m = self.shirt_full_mask > 0.1
-        result = shirt.copy()
-        result[:,:,0] = np.where(m, lum*r, shirt[:,:,0])
-        result[:,:,1] = np.where(m, lum*g, shirt[:,:,1])
-        result[:,:,2] = np.where(m, lum*b, shirt[:,:,2])
-        return result
-
     def render(self, design_img, x=0, y=0, w=None, h=None, color="#ffffff"):
-        sw,sh = int(self.src_w),int(self.src_h)
-        if w is None: w=sw
-        if h is None: h=sh
+        sw, sh = int(self.src_w), int(self.src_h)
+        if w is None: w = sw
+        if h is None: h = sh
 
-        # Recolor shirt if needed
-        shirt = self.shirt_arr if color=="#ffffff" else self.recolor(self.shirt_arr, color)
+        # Step 1: recolor shirt
+        shirt = self.shirt_arr.copy()
+        if color.lower() != "#ffffff":
+            r = int(color[1:3],16)/255
+            g = int(color[3:5],16)/255
+            b = int(color[5:7],16)/255
+            lum = 0.299*shirt[:,:,0]+0.587*shirt[:,:,1]+0.114*shirt[:,:,2]
+            m = self.shirt_full_mask > 0.1
+            shirt[:,:,0] = np.where(m, lum*r, shirt[:,:,0])
+            shirt[:,:,1] = np.where(m, lum*g, shirt[:,:,1])
+            shirt[:,:,2] = np.where(m, lum*b, shirt[:,:,2])
 
+        # Step 2: warp design onto shirt
         src_canvas = Image.new("RGBA",(sw,sh),(0,0,0,0))
         src_canvas.paste(design_img.resize((w,h),Image.LANCZOS),(x,y))
-        dw,dh = src_canvas.size
+        dw, dh = src_canvas.size
         design_arr = np.array(src_canvas).astype(np.float32)
 
         nx = self._rx/self.src_w*dw
@@ -93,12 +124,23 @@ class MockupEngine:
 
         warped = np.zeros((self.canvas_h,self.canvas_w,4),dtype=np.float32)
         vi = np.where(valid)[0]; fi = self._ridx[vi]
-        warped[fi//self.canvas_w,fi%self.canvas_w] = design_arr[ny[valid].astype(int),nx[valid].astype(int)]
-        warped[:,:,3] = warped[:,:,3]*self.mask_arr
+        warped[fi//self.canvas_w, fi%self.canvas_w] = design_arr[
+            ny[valid].astype(int), nx[valid].astype(int)]
+        warped[:,:,3] = warped[:,:,3] * self.mask_arr
 
         alpha      = warped[:,:,3:4]/255
         design_rgb = warped[:,:,:3]/255
         result     = shirt*(1-alpha) + shirt*design_rgb*alpha
+
+        # Step 3: apply overlay layers ONLY inside shirt mask
+        for img, opacity, blend_mode in self.overlays:
+            fn = BLEND_FNS.get(blend_mode)
+            if fn:
+                layer_alpha = img[:,:,3:4]
+                layer_rgb   = img[:,:,:3]
+                blended = fn(result, layer_rgb)
+                effective = opacity * layer_alpha * self.shirt_full_mask_3d
+                result = result*(1-effective) + blended*effective
 
         return Image.fromarray((np.clip(result,0,1)*255).astype(np.uint8))
 
@@ -121,15 +163,15 @@ async def render_mockup(
     except:
         raise HTTPException(400,"Could not read image")
 
-    result = engine.render(design,x=x,y=y,w=w,h=h,color=color)
+    result = engine.render(design, x=x, y=y, w=w, h=h, color=color)
     buf = io.BytesIO()
-    result.save(buf,format="PNG",optimize=True)
+    result.save(buf, format="PNG", optimize=True)
     buf.seek(0)
-    return Response(content=buf.read(),media_type="image/png",
+    return Response(content=buf.read(), media_type="image/png",
                     headers={"Content-Disposition":"attachment; filename=mockup.png"})
 
 @app.get("/health")
 def health():
     return {"status":"ok"}
 
-app.mount("/",StaticFiles(directory=os.path.dirname(__file__),html=True),name="static")
+app.mount("/", StaticFiles(directory=os.path.dirname(__file__), html=True), name="static")
