@@ -224,8 +224,8 @@ function loadMockupAssets(name){
     const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
     const tg=tmp.getContext('2d');tg.drawImage(mi,0,0,CW,CH);
     const raw=tg.getImageData(0,0,CW,CH).data;
-    maskPixels=new Uint8Array(CW*CH);
-    for(let i=0;i<CW*CH;i++)maskPixels[i]=raw[i*4]>128?255:0;
+    maskPixels=new Float32Array(CW*CH);
+    for(let i=0;i<CW*CH;i++)maskPixels[i]=raw[i*4]/255;
     drawPreview();
   };
   mi.src='/'+name+'/shirt_mask_preview.png?v='+Date.now();
@@ -274,9 +274,12 @@ function drawPreview(){
   const out=new Uint8ClampedArray(CW*CH*4);
   for(let i=0;i<CW*CH;i++){
     const s=i*4;
-    if(!isWhite&&maskPixels&&maskPixels[i]>128){
+    const m=maskPixels?maskPixels[i]:0;
+    if(!isWhite&&m>0){
       const lum=0.299*shirtPixels[s]/255+0.587*shirtPixels[s+1]/255+0.114*shirtPixels[s+2]/255;
-      out[s]=Math.round(lum*tr*255);out[s+1]=Math.round(lum*tg*255);out[s+2]=Math.round(lum*tb*255);
+      out[s]=Math.round((shirtPixels[s]/255*(1-m)+lum*tr*m)*255);
+      out[s+1]=Math.round((shirtPixels[s+1]/255*(1-m)+lum*tg*m)*255);
+      out[s+2]=Math.round((shirtPixels[s+2]/255*(1-m)+lum*tb*m)*255);
     }else{out[s]=shirtPixels[s];out[s+1]=shirtPixels[s+1];out[s+2]=shirtPixels[s+2];}
     out[s+3]=255;
   }
