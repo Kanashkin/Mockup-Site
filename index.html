@@ -50,6 +50,11 @@
     #resultImg.show{display:block}
     .status{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;min-height:16px}
     .status.err{color:#f66}.status.ok{color:var(--accent)}
+
+    .mockup-selector{display:flex;gap:10px;margin-bottom:0}
+    .mockup-btn{flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
+    .mockup-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(232,255,71,0.06)}
+    .mockup-btn img{width:100%;height:60px;object-fit:cover;border-radius:4px;margin-bottom:6px;display:block}
     @keyframes spin{to{transform:rotate(360deg)}}
     .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(232,255,71,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
   </style>
@@ -126,6 +131,38 @@ PRESETS.forEach(p=>{
   el.addEventListener('click',()=>setColor(p.hex,el));
   presetsEl.appendChild(el);
 });
+
+
+let currentMockup = 'mockup_package';
+
+function selectMockup(name, btnId) {
+  currentMockup = name;
+  document.querySelectorAll('.mockup-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(btnId).classList.add('active');
+  // Reload shirt and mask for this mockup
+  shirtPixels = null; maskPixels = null; warpedPixels = null;
+  const si2 = new Image();
+  si2.onload = () => {
+    shirtImg = si2;
+    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
+    const tg=tmp.getContext('2d'); tg.drawImage(si2,0,0,CW,CH);
+    shirtPixels = tg.getImageData(0,0,CW,CH).data.slice();
+    drawPreview();
+  };
+  si2.src = '/' + name + '/shirt_preview.png';
+  const mi2 = new Image();
+  mi2.onload = () => {
+    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
+    const tg=tmp.getContext('2d'); tg.drawImage(mi2,0,0,CW,CH);
+    const raw=tg.getImageData(0,0,CW,CH).data;
+    maskPixels=new Uint8Array(CW*CH);
+    for(let i=0;i<CW*CH;i++) maskPixels[i]=raw[i*4]>128?255:0;
+  };
+  mi2.src = '/' + name + '/shirt_mask_preview.png';
+  fetch('/' + name + '/warp_data.json').then(r=>r.json()).then(d=>{
+    warpMap=d; buildWarpLookup(); drawPreview();
+  });
+}
 
 let shirtColor='#ffffff';
 function setColor(hex,presetEl){
