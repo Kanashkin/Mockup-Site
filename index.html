@@ -25,6 +25,13 @@
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
     .card-body{padding:16px}
+    /* Mockup selector */
+    .mockup-selector{display:flex;gap:10px}
+    .mockup-btn{flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
+    .mockup-btn:hover{border-color:var(--accent)}
+    .mockup-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(232,255,71,0.06)}
+    .mockup-btn img{width:100%;height:70px;object-fit:cover;object-position:top;border-radius:4px;margin-bottom:6px;display:block}
+    /* Color */
     .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
     .preset{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s;flex-shrink:0}
     .preset:hover{transform:scale(1.15)}
@@ -33,6 +40,7 @@
     .color-row label{font-size:12px;color:var(--muted)}
     #colorPicker{width:44px;height:32px;border:none;border-radius:6px;cursor:pointer;padding:0;background:none}
     #colorHex{font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;width:80px;font-family:monospace}
+    /* Sliders */
     .sliders{display:flex;flex-direction:column;gap:12px}
     .row{display:flex;align-items:center;gap:10px;font-size:13px}
     .row label{width:48px;color:var(--muted);font-size:12px}
@@ -50,11 +58,6 @@
     #resultImg.show{display:block}
     .status{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;min-height:16px}
     .status.err{color:#f66}.status.ok{color:var(--accent)}
-
-    .mockup-selector{display:flex;gap:10px;margin-bottom:0}
-    .mockup-btn{flex:1;padding:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
-    .mockup-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(232,255,71,0.06)}
-    .mockup-btn img{width:100%;height:60px;object-fit:cover;border-radius:4px;margin-bottom:6px;display:block}
     @keyframes spin{to{transform:rotate(360deg)}}
     .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(232,255,71,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
   </style>
@@ -73,6 +76,25 @@
     </div>
   </div>
   <div class="sidebar">
+
+    <!-- Mockup selector -->
+    <div class="card">
+      <div class="card-title">Choose Mockup</div>
+      <div class="card-body">
+        <div class="mockup-selector">
+          <div class="mockup-btn active" id="mock1" onclick="selectMockup('mockup_package','mock1')">
+            <img src="/mockup_package/shirt_preview.png" alt="">
+            Mockup 1
+          </div>
+          <div class="mockup-btn" id="mock2" onclick="selectMockup('mockup2_package','mock2')">
+            <img src="/mockup2_package/shirt_preview.png" alt="">
+            Mockup 2
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Shirt Color -->
     <div class="card">
       <div class="card-title">Shirt Color</div>
       <div class="card-body">
@@ -84,6 +106,8 @@
         </div>
       </div>
     </div>
+
+    <!-- Position -->
     <div class="card">
       <div class="card-title">Position & Size</div>
       <div class="card-body">
@@ -96,6 +120,8 @@
         <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
     </div>
+
+    <!-- Export -->
     <div class="card">
       <div class="card-title">Export</div>
       <div class="card-body">
@@ -110,17 +136,17 @@
 
 <script>
 const CW=460, CH=690;
-const SRC_W=2342, SRC_H=2616;
+let SRC_W=2342, SRC_H=2616;
+let currentMockup='mockup_package';
 
 const PRESETS=[
-  {name:'White',  hex:'#ffffff'},{name:'Black',  hex:'#1a1a1a'},
-  {name:'Navy',   hex:'#1d3557'},{name:'Red',    hex:'#e63946'},
-  {name:'Forest', hex:'#2d6a4f'},{name:'Sage',   hex:'#84a98c'},
-  {name:'Sand',   hex:'#d4a574'},{name:'Slate',  hex:'#64748b'},
-  {name:'Maroon', hex:'#7b2d8b'},{name:'Orange', hex:'#e76f51'},
-  {name:'Sky',    hex:'#48cae4'},{name:'Pink',   hex:'#f4a261'},
+  {name:'White',hex:'#ffffff'},{name:'Black',hex:'#1a1a1a'},
+  {name:'Navy',hex:'#1d3557'},{name:'Red',hex:'#e63946'},
+  {name:'Forest',hex:'#2d6a4f'},{name:'Sage',hex:'#84a98c'},
+  {name:'Sand',hex:'#d4a574'},{name:'Slate',hex:'#64748b'},
+  {name:'Maroon',hex:'#7b2d8b'},{name:'Orange',hex:'#e76f51'},
+  {name:'Sky',hex:'#48cae4'},{name:'Pink',hex:'#f4a261'},
 ];
-
 const presetsEl=document.getElementById('presets');
 PRESETS.forEach(p=>{
   const el=document.createElement('div');
@@ -131,38 +157,6 @@ PRESETS.forEach(p=>{
   el.addEventListener('click',()=>setColor(p.hex,el));
   presetsEl.appendChild(el);
 });
-
-
-let currentMockup = 'mockup_package';
-
-function selectMockup(name, btnId) {
-  currentMockup = name;
-  document.querySelectorAll('.mockup-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(btnId).classList.add('active');
-  // Reload shirt and mask for this mockup
-  shirtPixels = null; maskPixels = null; warpedPixels = null;
-  const si2 = new Image();
-  si2.onload = () => {
-    shirtImg = si2;
-    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
-    const tg=tmp.getContext('2d'); tg.drawImage(si2,0,0,CW,CH);
-    shirtPixels = tg.getImageData(0,0,CW,CH).data.slice();
-    drawPreview();
-  };
-  si2.src = '/' + name + '/shirt_preview.png';
-  const mi2 = new Image();
-  mi2.onload = () => {
-    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
-    const tg=tmp.getContext('2d'); tg.drawImage(mi2,0,0,CW,CH);
-    const raw=tg.getImageData(0,0,CW,CH).data;
-    maskPixels=new Uint8Array(CW*CH);
-    for(let i=0;i<CW*CH;i++) maskPixels[i]=raw[i*4]>128?255:0;
-  };
-  mi2.src = '/' + name + '/shirt_mask_preview.png';
-  fetch('/' + name + '/warp_data.json').then(r=>r.json()).then(d=>{
-    warpMap=d; buildWarpLookup(); drawPreview();
-  });
-}
 
 let shirtColor='#ffffff';
 function setColor(hex,presetEl){
@@ -187,55 +181,61 @@ document.getElementById('colorHex').addEventListener('change',e=>{
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
-let shirtImg=null, designImg=null, file=null;
-let warpMap=null, warpedPixels=null;
-let shirtPixels=null; // original shirt pixels (460x690 RGBA)
-let maskPixels=null;  // shirt mask (460x690, 0 or 255)
+let shirtImg=null,designImg=null,file=null;
+let warpMap=null,warpedPixels=null;
+let shirtPixels=null,maskPixels=null;
 let pos={cx:0.5,cy:0.48,size:0.35};
 
-// Load shirt
-const si=new Image();
-si.onload=()=>{
-  shirtImg=si;
-  // Extract shirt pixels into array once
-  const tmp=document.createElement('canvas');
-  tmp.width=CW; tmp.height=CH;
-  const tg=tmp.getContext('2d');
-  tg.drawImage(si,0,0,CW,CH);
-  shirtPixels=tg.getImageData(0,0,CW,CH).data.slice(); // copy
-  drawPreview();
-};
-si.src='/shirt_preview.png';
+function loadMockupAssets(name){
+  shirtPixels=null; maskPixels=null; warpedPixels=null; warpMap=null;
+  const si=new Image();
+  si.onload=()=>{
+    shirtImg=si;
+    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
+    const tg=tmp.getContext('2d'); tg.drawImage(si,0,0,CW,CH);
+    shirtPixels=tg.getImageData(0,0,CW,CH).data.slice();
+    drawPreview();
+  };
+  si.src='/'+name+'/shirt_preview.png?t='+Date.now();
+  const mi=new Image();
+  mi.onload=()=>{
+    const tmp=document.createElement('canvas'); tmp.width=CW; tmp.height=CH;
+    const tg=tmp.getContext('2d'); tg.drawImage(mi,0,0,CW,CH);
+    const raw=tg.getImageData(0,0,CW,CH).data;
+    maskPixels=new Uint8Array(CW*CH);
+    for(let i=0;i<CW*CH;i++) maskPixels[i]=raw[i*4]>128?255:0;
+  };
+  mi.src='/'+name+'/shirt_mask_preview.png?t='+Date.now();
+  fetch('/'+name+'/warp_data.json?t='+Date.now()).then(r=>r.json()).then(d=>{
+    warpMap=d;
+    SRC_W=d.src_w; SRC_H=d.src_h;
+    buildWarpLookup(); drawPreview();
+  });
+}
 
-// Load mask
-const mi=new Image();
-mi.onload=()=>{
-  const tmp=document.createElement('canvas');
-  tmp.width=CW; tmp.height=CH;
-  const tg=tmp.getContext('2d');
-  tg.drawImage(mi,0,0,CW,CH);
-  const raw=tg.getImageData(0,0,CW,CH).data;
-  maskPixels=new Uint8Array(CW*CH);
-  for(let i=0;i<CW*CH;i++) maskPixels[i]=raw[i*4]>128?255:0;
-  drawPreview();
-};
-mi.src='/shirt_mask_preview.png';
+function selectMockup(name,btnId){
+  currentMockup=name;
+  document.querySelectorAll('.mockup-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(btnId).classList.add('active');
+  loadMockupAssets(name);
+}
 
-// Load warp map
-fetch('/warp_data.json').then(r=>r.json()).then(d=>{
-  warpMap=d; buildWarpLookup(); drawPreview();
-});
+// Initial load
+loadMockupAssets('mockup_package');
+
+fetch('/warp_data.json').then(r=>r.json()).catch(()=>null);
 
 function buildWarpLookup(){
+  if(!warpMap)return;
   const mw=warpMap.map_w,mh=warpMap.map_h;
   const mx=warpMap.map_x,my=warpMap.map_y;
   warpedPixels=new Float32Array(CW*CH*2);
   for(let py=0;py<CH;py++){
     for(let px=0;px<CW;px++){
-      const mxf=px/CW*mw, myf=py/CH*mh;
-      const mx0=Math.floor(mxf), my0=Math.floor(myf);
-      const mx1=Math.min(mx0+1,mw-1), my1=Math.min(my0+1,mh-1);
-      const fx=mxf-mx0, fy=myf-my0;
+      const mxf=px/CW*mw,myf=py/CH*mh;
+      const mx0=Math.floor(mxf),my0=Math.floor(myf);
+      const mx1=Math.min(mx0+1,mw-1),my1=Math.min(my0+1,mh-1);
+      const fx=mxf-mx0,fy=myf-my0;
       const i00=my0*mw+mx0,i10=my0*mw+mx1,i01=my1*mw+mx0,i11=my1*mw+mx1;
       const xu=mx[i00];
       if(xu<0){warpedPixels[(py*CW+px)*2]=-1;continue;}
@@ -257,45 +257,32 @@ function hexToRgb(hex){
 
 function drawPreview(){
   ctx.clearRect(0,0,CW,CH);
-  if(!shirtImg||!shirtPixels)return;
-
-  // Build recolored shirt using mask + luminance
-  const out=new Uint8ClampedArray(CW*CH*4);
-  const [tr,tg,tb]=hexToRgb(shirtColor);
+  if(!shirtPixels)return;
+  const[tr,tg,tb]=hexToRgb(shirtColor);
   const isWhite=shirtColor==='#ffffff';
-
+  const out=new Uint8ClampedArray(CW*CH*4);
   for(let i=0;i<CW*CH;i++){
-    const si4=i*4;
-    const sr=shirtPixels[si4]/255, sg=shirtPixels[si4+1]/255, sb=shirtPixels[si4+2]/255;
-    if(!isWhite && maskPixels && maskPixels[i]>128){
-      // Recolor via luminance
+    const s=i*4;
+    const sr=shirtPixels[s]/255,sg=shirtPixels[s+1]/255,sb=shirtPixels[s+2]/255;
+    if(!isWhite&&maskPixels&&maskPixels[i]>128){
       const lum=0.299*sr+0.587*sg+0.114*sb;
-      out[si4]=Math.round(lum*tr*255);
-      out[si4+1]=Math.round(lum*tg*255);
-      out[si4+2]=Math.round(lum*tb*255);
-    } else {
-      out[si4]=shirtPixels[si4];
-      out[si4+1]=shirtPixels[si4+1];
-      out[si4+2]=shirtPixels[si4+2];
+      out[s]=Math.round(lum*tr*255);
+      out[s+1]=Math.round(lum*tg*255);
+      out[s+2]=Math.round(lum*tb*255);
+    }else{
+      out[s]=shirtPixels[s]; out[s+1]=shirtPixels[s+1]; out[s+2]=shirtPixels[s+2];
     }
-    out[si4+3]=255;
+    out[s+3]=255;
   }
-
   ctx.putImageData(new ImageData(out,CW,CH),0,0);
-
-  // Apply warped design
   if(!designImg||!warpedPixels)return;
   const offC=document.createElement('canvas');
   offC.width=designImg.naturalWidth; offC.height=designImg.naturalHeight;
-  const offG=offC.getContext('2d');
-  offG.drawImage(designImg,0,0);
+  const offG=offC.getContext('2d'); offG.drawImage(designImg,0,0);
   const dw=offC.width,dh=offC.height;
   const dd=offG.getImageData(0,0,dw,dh).data;
-
-  const sd=ctx.getImageData(0,0,CW,CH);
-  const od=sd.data;
+  const sd=ctx.getImageData(0,0,CW,CH); const od=sd.data;
   const half=pos.size/2;
-
   for(let py=0;py<CH;py++){
     for(let px=0;px<CW;px++){
       const wi=(py*CW+px)*2;
@@ -306,8 +293,7 @@ function drawPreview(){
       if(du<0||du>=1||dv<0||dv>=1)continue;
       const dx=Math.floor(du*dw),dy=Math.floor(dv*dh);
       const di=(dy*dw+dx)*4;
-      const da=dd[di+3]/255;
-      if(da<0.01)continue;
+      const da=dd[di+3]/255; if(da<0.01)continue;
       const oi=(py*CW+px)*4;
       const dr=dd[di]/255,dg=dd[di+1]/255,db2=dd[di+2]/255;
       const sr2=od[oi]/255,sg2=od[oi+1]/255,sb2=od[oi+2]/255;
@@ -319,22 +305,14 @@ function drawPreview(){
   ctx.putImageData(sd,0,0);
 }
 
-// Upload
 document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])loadDesign(e.target.files[0]);});
 function loadDesign(f){
   file=f;
   const img=new Image();
-  img.onload=()=>{
-    designImg=img;
-    document.getElementById('uploadOverlay').classList.add('hidden');
-    canvas.classList.add('has-design');
-    document.getElementById('renderBtn').disabled=false;
-    drawPreview();
-  };
+  img.onload=()=>{designImg=img;document.getElementById('uploadOverlay').classList.add('hidden');canvas.classList.add('has-design');document.getElementById('renderBtn').disabled=false;drawPreview();};
   img.src=URL.createObjectURL(f);
 }
 
-// Sliders
 const sSize=document.getElementById('sSize'),vSize=document.getElementById('vSize');
 const sX=document.getElementById('sX'),vX=document.getElementById('vX');
 const sY=document.getElementById('sY'),vY=document.getElementById('vY');
@@ -348,12 +326,8 @@ sX.addEventListener('input',()=>{pos.cx=sX.value/100;vX.textContent=sX.value+'%'
 sY.addEventListener('input',()=>{pos.cy=sY.value/100;vY.textContent=sY.value+'%';drawPreview();});
 document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy:0.48,size:0.35};syncSliders();drawPreview();});
 
-// Drag
 let dragging=false,dsx,dsy,dcx,dcy;
-canvas.addEventListener('mousedown',e=>{
-  if(!designImg)return;
-  dragging=true;dsx=e.offsetX;dsy=e.offsetY;dcx=pos.cx;dcy=pos.cy;e.preventDefault();
-});
+canvas.addEventListener('mousedown',e=>{if(!designImg)return;dragging=true;dsx=e.offsetX;dsy=e.offsetY;dcx=pos.cx;dcy=pos.cy;e.preventDefault();});
 document.addEventListener('mousemove',e=>{
   if(!dragging)return;
   const rect=canvas.getBoundingClientRect();
@@ -362,16 +336,8 @@ document.addEventListener('mousemove',e=>{
   syncSliders();drawPreview();
 });
 document.addEventListener('mouseup',()=>dragging=false);
+canvas.addEventListener('wheel',e=>{if(!designImg)return;pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));syncSliders();drawPreview();e.preventDefault();},{passive:false});
 
-// Scroll = resize
-canvas.addEventListener('wheel',e=>{
-  if(!designImg)return;
-  pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));
-  syncSliders();drawPreview();
-  e.preventDefault();
-},{passive:false});
-
-// Generate
 document.getElementById('renderBtn').addEventListener('click',async()=>{
   if(!file)return;
   const half=pos.size/2;
@@ -379,30 +345,24 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   const sy=Math.round((pos.cy-half)*SRC_H);
   const sw=Math.round(pos.size*SRC_W);
   const sh=Math.round(pos.size*SRC_H);
-
   document.getElementById('renderBtn').disabled=true;
   const st=document.getElementById('status');
   st.className='status';st.innerHTML='<span class="spin"></span>Rendering…';
   document.getElementById('resultImg').classList.remove('show');
   document.getElementById('dlBtn').classList.remove('show');
-
   const form=new FormData();
   form.append('file',file);form.append('x',sx);form.append('y',sy);
   form.append('w',sw);form.append('h',sh);form.append('color',shirtColor);
-
+  form.append('mockup',currentMockup);
   try{
     const res=await fetch('/render',{method:'POST',body:form});
     if(!res.ok)throw new Error('Error '+res.status);
     const url=URL.createObjectURL(await res.blob());
-    const ri=document.getElementById('resultImg');
-    ri.src=url;ri.classList.add('show');
+    const ri=document.getElementById('resultImg');ri.src=url;ri.classList.add('show');
     const dl=document.getElementById('dlBtn');dl.href=url;dl.classList.add('show');
     st.className='status ok';st.textContent='✓ Done';
-  }catch(err){
-    st.className='status err';st.textContent='✗ '+err.message;
-  }finally{
-    document.getElementById('renderBtn').disabled=false;
-  }
+  }catch(err){st.className='status err';st.textContent='✗ '+err.message;}
+  finally{document.getElementById('renderBtn').disabled=false;}
 });
 </script>
 </body>
