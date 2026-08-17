@@ -5,8 +5,8 @@
   },
   "warp": {
     "bounds": {
-      "left": 0.0,
-      "top": 0.0,
+      "left": 0,
+      "top": 0,
       "right": 1747.0,
       "bottom": 1997.0
     },
@@ -59,32 +59,32 @@
   },
   "print_zone": {
     "x0": 349,
-    "y0": 499,
+    "y0": 439,
     "x1": 1397,
-    "y1": 1697
+    "y1": 1637
   },
   "overlays": [
     {
       "name": "Layer 2",
-      "file": "overlay_SOFT_LIGHT.png",
+      "file": "overlay_0_SOFT_LIGHT.png",
       "opacity": 0.30196078431372547,
       "blend_mode": "BlendMode.SOFT_LIGHT"
     },
     {
       "name": "Layer 2",
-      "file": "overlay_MULTIPLY.png",
+      "file": "overlay_1_MULTIPLY.png",
       "opacity": 1.0,
       "blend_mode": "BlendMode.MULTIPLY"
     },
     {
       "name": "Layer 2",
-      "file": "overlay_SCREEN.png",
+      "file": "overlay_2_SCREEN.png",
       "opacity": 1.0,
       "blend_mode": "BlendMode.SCREEN"
     },
     {
       "name": "Layer 2",
-      "file": "overlay_OVERLAY.png",
+      "file": "overlay_3_OVERLAY.png",
       "opacity": 0.30196078431372547,
       "blend_mode": "BlendMode.OVERLAY"
     }
