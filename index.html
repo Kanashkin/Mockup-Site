@@ -116,8 +116,7 @@
   </div>
 </div>
 
-<h1>T-Shirt <span>Mockup</span></h1>
-<p class="sub" id="subText">Choose a mockup to start designing</p>
+<p class="sub" id="subText" style="margin-top:8px"></p>
 
 <div class="gallery" id="galleryView">
   <div class="gallery-grid" id="galleryGrid"></div>
@@ -396,7 +395,7 @@ function openEditor(name){
 function showGallery(){
   hideAllViews();
   document.getElementById('galleryView').style.display='block';
-  document.getElementById('subText').textContent='Choose a mockup to start designing';
+  document.getElementById('subText').textContent='';
 }
 document.getElementById('backBtn').addEventListener('click',showGallery);
 
