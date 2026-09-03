@@ -135,7 +135,7 @@ const CW=920,CH=1380;
 let SRC_W=2342,SRC_H=2616;
 let currentMockup='mockup_package';
 let shirtColor='#ffffff';
-let shirtPixels=null,maskPixels=null,warpedPixels=null,warpMap=null;
+let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null;
 let designImg=null,file=null;
 let pos={cx:0.5,cy:0.48,size:0.35};
 
@@ -206,18 +206,51 @@ function loadDesign(f){
   img.src=URL.createObjectURL(f);
 }
 
+// ── Blend modes (must mirror server.py's BLEND_FNS exactly) ────────────────
+function blendSoftLight(b,bl){
+  if(bl<=0.5)return b-(1-2*bl)*b*(1-b);
+  const d=b<=0.25?((16*b-12)*b+4)*b:Math.sqrt(Math.max(b,0));
+  return b+(2*bl-1)*(d-b);
+}
+function blendMultiply(b,bl){return b*bl;}
+function blendScreen(b,bl){return 1-(1-b)*(1-bl);}
+function blendOverlay(b,bl){return b<=0.5?2*b*bl:1-2*(1-b)*(1-bl);}
+const BLEND_FNS={
+  'BlendMode.SOFT_LIGHT':blendSoftLight,
+  'BlendMode.MULTIPLY':blendMultiply,
+  'BlendMode.SCREEN':blendScreen,
+  'BlendMode.OVERLAY':blendOverlay,
+};
+
 // ── Mockup assets ─────────────────────────────────────────────────────────
 function loadMockupAssets(name){
-  shirtPixels=null;maskPixels=null;warpedPixels=null;warpMap=null;
+  basePixels=null;maskPixels=null;warpedPixels=null;warpMap=null;overlaysData=null;
   const si=new Image();
   si.crossOrigin='anonymous';
   si.onload=()=>{
     const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
     const tg=tmp.getContext('2d');tg.drawImage(si,0,0,CW,CH);
-    shirtPixels=tg.getImageData(0,0,CW,CH).data.slice();
+    basePixels=tg.getImageData(0,0,CW,CH).data.slice();
     drawPreview();
   };
-  si.src='/'+name+'/shirt_preview.png?v='+Date.now();
+  si.src='/'+name+'/shirt_base.png?v='+Date.now();
+  fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
+    const list=pkg.overlays||[];
+    if(list.length===0){overlaysData=[];drawPreview();return;}
+    const loaded=new Array(list.length);
+    let pending=list.length;
+    list.forEach((ov,idx)=>{
+      const oi=new Image();
+      oi.crossOrigin='anonymous';
+      oi.onload=()=>{
+        const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
+        const tg=tmp.getContext('2d');tg.drawImage(oi,0,0,CW,CH);
+        loaded[idx]={pixels:tg.getImageData(0,0,CW,CH).data,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
+        if(--pending===0){overlaysData=loaded;drawPreview();}
+      };
+      oi.src='/'+name+'/'+ov.file+'?v='+Date.now();
+    });
+  });
   const mi=new Image();
   mi.crossOrigin='anonymous';
   mi.onload=()=>{
@@ -268,46 +301,72 @@ function buildWarpLookup(){
 function hexToRgb(hex){return[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255];}
 function drawPreview(){
   ctx.clearRect(0,0,CW,CH);
-  if(!shirtPixels)return;
+  if(!basePixels||!maskPixels)return;
   const[tr,tg,tb]=hexToRgb(shirtColor);
-  const isWhite=shirtColor==='#ffffff';
+
+  // Step 1+2 (mirrors server.py): background photo, flat color fill clipped by shirt mask
   const out=new Uint8ClampedArray(CW*CH*4);
   for(let i=0;i<CW*CH;i++){
     const s=i*4;
-    const m=maskPixels?maskPixels[i]:0;
-    if(!isWhite&&m>0){
-      const lum=0.299*shirtPixels[s]/255+0.587*shirtPixels[s+1]/255+0.114*shirtPixels[s+2]/255;
-      out[s]=Math.round((shirtPixels[s]/255*(1-m)+lum*tr*m)*255);
-      out[s+1]=Math.round((shirtPixels[s+1]/255*(1-m)+lum*tg*m)*255);
-      out[s+2]=Math.round((shirtPixels[s+2]/255*(1-m)+lum*tb*m)*255);
-    }else{out[s]=shirtPixels[s];out[s+1]=shirtPixels[s+1];out[s+2]=shirtPixels[s+2];}
+    const m=maskPixels[i];
+    out[s]  =Math.round((basePixels[s]/255  *(1-m)+tr*m)*255);
+    out[s+1]=Math.round((basePixels[s+1]/255*(1-m)+tg*m)*255);
+    out[s+2]=Math.round((basePixels[s+2]/255*(1-m)+tb*m)*255);
     out[s+3]=255;
   }
   ctx.putImageData(new ImageData(out,CW,CH),0,0);
-  if(!designImg||!warpedPixels)return;
-  const offC=document.createElement('canvas');
-  offC.width=designImg.naturalWidth;offC.height=designImg.naturalHeight;
-  const offG=offC.getContext('2d');offG.drawImage(designImg,0,0);
-  const dw=offC.width,dh=offC.height,dd=offG.getImageData(0,0,dw,dh).data;
-  const sd=ctx.getImageData(0,0,CW,CH),od=sd.data;
-  const half=pos.size/2;
-  for(let py=0;py<CH;py++){
-    for(let px=0;px<CW;px++){
-      const wi=(py*CW+px)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
-      if(su<0)continue;
-      const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
-      if(du<0||du>=1||dv<0||dv>=1)continue;
-      const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
-      const da=dd[di+3]/255;if(da<0.01)continue;
-      const oi=(py*CW+px)*4;
-      const sr=od[oi]/255,sg=od[oi+1]/255,sb=od[oi+2]/255;
-      const dr=dd[di]/255,dg=dd[di+1]/255,db=dd[di+2]/255;
-      od[oi]=Math.round((sr*(1-da)+sr*dr*da)*255);
-      od[oi+1]=Math.round((sg*(1-da)+sg*dg*da)*255);
-      od[oi+2]=Math.round((sb*(1-da)+sb*db*da)*255);
+
+  // Step 3: warp design onto shirt (multiply blend), same as before
+  if(designImg&&warpedPixels){
+    const offC=document.createElement('canvas');
+    offC.width=designImg.naturalWidth;offC.height=designImg.naturalHeight;
+    const offG=offC.getContext('2d');offG.drawImage(designImg,0,0);
+    const dw=offC.width,dh=offC.height,dd=offG.getImageData(0,0,dw,dh).data;
+    const sd=ctx.getImageData(0,0,CW,CH),od=sd.data;
+    const half=pos.size/2;
+    for(let py=0;py<CH;py++){
+      for(let px=0;px<CW;px++){
+        const wi=(py*CW+px)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
+        if(su<0)continue;
+        const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
+        if(du<0||du>=1||dv<0||dv>=1)continue;
+        const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
+        const da=dd[di+3]/255;if(da<0.01)continue;
+        const oi=(py*CW+px)*4;
+        const sr=od[oi]/255,sg=od[oi+1]/255,sb=od[oi+2]/255;
+        const dr=dd[di]/255,dg=dd[di+1]/255,db=dd[di+2]/255;
+        od[oi]=Math.round((sr*(1-da)+sr*dr*da)*255);
+        od[oi+1]=Math.round((sg*(1-da)+sg*dg*da)*255);
+        od[oi+2]=Math.round((sb*(1-da)+sb*db*da)*255);
+      }
     }
+    ctx.putImageData(sd,0,0);
   }
-  ctx.putImageData(sd,0,0);
+
+  // Step 4 (mirrors server.py): shading overlays (Grey/Light/Shadow/Texture), clipped by shirt mask,
+  // applied on top of everything above — including the design — same as the backend.
+  if(overlaysData&&overlaysData.length){
+    const sd2=ctx.getImageData(0,0,CW,CH),od2=sd2.data;
+    for(let i=0;i<CW*CH;i++){
+      const s=i*4;
+      const m=maskPixels[i];
+      if(m<=0)continue;
+      let r=od2[s]/255,g=od2[s+1]/255,b=od2[s+2]/255;
+      for(let k=0;k<overlaysData.length;k++){
+        const o=overlaysData[k];
+        if(!o.blend)continue;
+        const op=o.pixels;
+        const or_=op[s]/255,og=op[s+1]/255,ob=op[s+2]/255,oa=op[s+3]/255;
+        const br=o.blend(r,or_),bg2=o.blend(g,og),bb=o.blend(b,ob);
+        const eff=o.opacity*oa*m;
+        r=r*(1-eff)+Math.min(1,Math.max(0,br))*eff;
+        g=g*(1-eff)+Math.min(1,Math.max(0,bg2))*eff;
+        b=b*(1-eff)+Math.min(1,Math.max(0,bb))*eff;
+      }
+      od2[s]=Math.round(r*255);od2[s+1]=Math.round(g*255);od2[s+2]=Math.round(b*255);
+    }
+    ctx.putImageData(sd2,0,0);
+  }
 }
 
 // ── Sliders ───────────────────────────────────────────────────────────────
