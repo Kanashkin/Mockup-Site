@@ -63,6 +63,11 @@
     "x1": 812,
     "y1": 1303
   },
+  "displace": {
+    "map": "overlay_Texture.png",
+    "h_scale": 10,
+    "v_scale": 10
+  },
   "overlays": [
     {
       "name": "Grey",
