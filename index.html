@@ -52,8 +52,9 @@
     .like-card:hover{border-color:var(--accent);transform:translateY(-2px)}
     .like-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
     .site-logo{position:fixed;top:16px;left:16px;height:34px;width:auto;z-index:50;cursor:pointer}
-    .auth-bar{position:fixed;top:16px;right:16px;display:flex;align-items:center;gap:10px;font-size:13px;z-index:50}
-    .auth-link{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s}
+    .auth-bar{position:fixed;top:16px;right:16px;display:flex;align-items:center;gap:22px;font-size:13px;z-index:50}
+    #authGuest,#authUser{display:flex;align-items:center;gap:22px}
+    .auth-link{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s}
     .auth-link:hover{border-color:var(--accent);color:var(--accent)}
     .auth-link.accent{border-color:var(--accent);color:var(--accent)}
     .auth-link.accent-solid{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
@@ -101,6 +102,17 @@
     .status.err{color:#f66}.status.ok{color:var(--accent)}
     @keyframes spin{to{transform:rotate(360deg)}}
     .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(233,51,35,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+
+    /* Mobile: the logo and the auth links used to share one row and overlap
+       at narrow widths. Below 640px the auth links move to their own row
+       under the logo instead — same sizes/spacing as desktop, just stacked,
+       so nothing has to shrink to the point of feeling cramped. */
+    @media (max-width:640px){
+      .site-logo{top:12px;left:12px;height:28px}
+      .auth-bar{top:52px;left:12px;right:12px;justify-content:flex-end;flex-wrap:wrap;row-gap:10px}
+      body{padding-top:136px}
+      .gallery-grid{grid-template-columns:repeat(3,1fr);gap:4px}
+    }
   </style>
 </head>
 <body>
