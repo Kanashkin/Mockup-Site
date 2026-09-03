@@ -413,6 +413,7 @@ async def render_mockup(
     file: UploadFile = File(...),
     x: int = Form(0), y: int = Form(0),
     w: int = Form(None), h: int = Form(None),
+    rot: float = Form(0),
     color: str = Form("#ffffff"),
     mockup: str = Form("mockup_package"),
     user: User = Depends(require_user),
@@ -431,6 +432,13 @@ async def render_mockup(
         design = Image.open(io.BytesIO(data)).convert("RGBA")
     except:
         raise HTTPException(400,"Could not read image")
+
+    if rot:
+        # Negated to match the client canvas's rotation direction (canvas
+        # ctx.rotate() is clockwise-positive, PIL's rotate() is
+        # counter-clockwise-positive) so the live preview and the final
+        # high-res render look the same for a given slider value.
+        design = design.rotate(-rot, expand=True, resample=Image.BICUBIC)
 
     result = engine.render(design,x=x,y=y,w=w,h=h,color=color)
     buf = io.BytesIO()

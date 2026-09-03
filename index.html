@@ -31,6 +31,16 @@
     .gallery-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
     .back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s}
     .back-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .toolbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .toolbar-row .back-btn{margin-bottom:12px}
+    .tool-icons{display:flex;gap:6px;margin-bottom:12px}
+    .icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;width:34px;height:34px;font-size:16px;line-height:1;cursor:pointer;transition:border-color .2s,color .2s;display:flex;align-items:center;justify-content:center}
+    .icon-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+    .icon-btn:disabled{opacity:.3;cursor:not-allowed}
+    .like-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    .like-card{border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:border-color .2s,transform .15s}
+    .like-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .like-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
     .site-logo{position:fixed;top:16px;left:16px;height:34px;width:auto;z-index:50}
     .auth-bar{position:fixed;top:16px;right:16px;display:flex;align-items:center;gap:10px;font-size:13px;z-index:50}
     .auth-link{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s}
@@ -136,7 +146,14 @@
 
 <div class="main" id="editorView" style="display:none">
   <div class="left-col">
-    <button class="back-btn" id="backBtn">← Back to designs</button>
+    <div class="toolbar-row">
+      <button class="back-btn" id="backBtn">← Back to designs</button>
+      <div class="tool-icons">
+        <button class="icon-btn" id="undoBtn" title="Undo" disabled>↶</button>
+        <button class="icon-btn" id="redoBtn" title="Redo" disabled>↷</button>
+        <button class="icon-btn" id="rotate90Btn" title="Rotate" disabled>⟳</button>
+      </div>
+    </div>
     <canvas id="previewCanvas" width="920" height="1380"></canvas>
 
     <div class="controls-compact">
@@ -162,6 +179,7 @@
           <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
           <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
           <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="48"><span id="vY">48%</span></div>
+          <div class="row"><label>Rotate</label><input type="range" id="sRot" min="-45" max="45" value="0"><span id="vRot">0°</span></div>
         </div>
         <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
@@ -182,6 +200,13 @@
         <a class="dl" id="dlBtn" download="mockup.png">↓ Download PNG</a>
       </div>
     </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-title">You might like</div>
+      <div class="card-body">
+        <div class="like-grid" id="likeGrid"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -192,7 +217,7 @@ let currentMockup='mockup_package';
 let shirtColor='#ffffff';
 let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null,dispData=null;
 let designImg=null,file=null;
-let pos={cx:0.5,cy:0.48,size:0.35};
+let pos={cx:0.5,cy:0.48,size:0.35,rot:0};
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
@@ -223,6 +248,7 @@ function setColor(hex,el){
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
   if(el)el.classList.add('active');
   drawPreview();
+  pushHistory();
 }
 document.getElementById('colorPicker').addEventListener('input',e=>{
   shirtColor=e.target.value;
@@ -230,10 +256,11 @@ document.getElementById('colorPicker').addEventListener('input',e=>{
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
   drawPreview();
 });
+document.getElementById('colorPicker').addEventListener('change',pushHistory);
 document.getElementById('colorHex').addEventListener('change',e=>{
   let v=e.target.value;
   if(!v.startsWith('#'))v='#'+v;
-  if(/^#[0-9a-fA-F]{6}$/.test(v)){shirtColor=v;document.getElementById('colorPicker').value=v;drawPreview();}
+  if(/^#[0-9a-fA-F]{6}$/.test(v)){shirtColor=v;document.getElementById('colorPicker').value=v;drawPreview();pushHistory();}
 });
 
 // ── Upload ────────────────────────────────────────────────────────────────
@@ -257,6 +284,7 @@ function loadDesign(f){
     document.getElementById('dropIcon').textContent='✓';
     document.getElementById('dropText').innerHTML='<strong>'+f.name+'</strong><br>'+Math.round(f.size/1024)+'KB — click to change';
     drawPreview();
+    updateHistoryButtons();
   };
   img.src=URL.createObjectURL(f);
 }
@@ -391,6 +419,28 @@ function openEditor(name){
   document.getElementById('editorView').style.display='flex';
   document.getElementById('subText').textContent='Upload your design — position it and pick a color';
   loadMockupAssets(name);
+  renderLikeGrid();
+  resetHistory();
+}
+function renderLikeGrid(){
+  const grid=document.getElementById('likeGrid');
+  grid.innerHTML='';
+  MOCKUPS.filter(m=>m.id!==currentMockup).forEach(m=>{
+    const c=document.createElement('div');
+    c.className='like-card';
+    c.innerHTML='<img src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
+    c.addEventListener('click',()=>switchMockup(m.id));
+    grid.appendChild(c);
+  });
+}
+// Switches the base photo only — designImg/file/shirtColor/pos (including
+// rotation) are left untouched so the user's current design and placement
+// carry over onto the newly-picked photo.
+function switchMockup(newId){
+  if(newId===currentMockup)return;
+  currentMockup=newId;
+  loadMockupAssets(newId);
+  renderLikeGrid();
 }
 function showGallery(){
   hideAllViews();
@@ -587,10 +637,31 @@ function drawPreview(){
 
   // Step 3: warp design onto shirt (multiply blend), same as before
   if(designImg&&warpedPixels){
+    // Pre-rotate the design (bounding-box expanded, like PIL's
+    // Image.rotate(angle, expand=True)) before it enters the warp-sampling
+    // loop below, rather than touching that math. Canvas ctx.rotate() is
+    // clockwise-positive for a positive angle here; server.py negates the
+    // angle before calling PIL's counter-clockwise-positive rotate() so the
+    // live preview and the final high-res download rotate the same way.
+    const rotRad=(pos.rot||0)*Math.PI/180;
+    const srcW=designImg.naturalWidth,srcH=designImg.naturalHeight;
+    let dw=srcW,dh=srcH,dd;
     const offC=document.createElement('canvas');
-    offC.width=designImg.naturalWidth;offC.height=designImg.naturalHeight;
-    const offG=offC.getContext('2d');offG.drawImage(designImg,0,0);
-    const dw=offC.width,dh=offC.height,dd=offG.getImageData(0,0,dw,dh).data;
+    if(rotRad){
+      const cosA=Math.abs(Math.cos(rotRad)),sinA=Math.abs(Math.sin(rotRad));
+      dw=Math.round(srcW*cosA+srcH*sinA);
+      dh=Math.round(srcW*sinA+srcH*cosA);
+      offC.width=dw;offC.height=dh;
+      const offG=offC.getContext('2d');
+      offG.translate(dw/2,dh/2);
+      offG.rotate(rotRad);
+      offG.drawImage(designImg,-srcW/2,-srcH/2);
+      dd=offG.getImageData(0,0,dw,dh).data;
+    }else{
+      offC.width=dw;offC.height=dh;
+      const offG=offC.getContext('2d');offG.drawImage(designImg,0,0);
+      dd=offG.getImageData(0,0,dw,dh).data;
+    }
     const sd=ctx.getImageData(0,0,CW,CH),od=sd.data;
     const half=pos.size/2;
     for(let py=0;py<CH;py++){
@@ -653,15 +724,32 @@ function drawPreview(){
 const sSize=document.getElementById('sSize'),vSize=document.getElementById('vSize');
 const sX=document.getElementById('sX'),vX=document.getElementById('vX');
 const sY=document.getElementById('sY'),vY=document.getElementById('vY');
+const sRot=document.getElementById('sRot'),vRot=document.getElementById('vRot');
 function syncSliders(){
   sSize.value=Math.round(pos.size*100);vSize.textContent=sSize.value+'%';
   sX.value=Math.round(pos.cx*100);vX.textContent=sX.value+'%';
   sY.value=Math.round(pos.cy*100);vY.textContent=sY.value+'%';
+  sRot.value=pos.rot||0;vRot.textContent=(pos.rot||0)+'°';
 }
 sSize.addEventListener('input',()=>{pos.size=sSize.value/100;vSize.textContent=sSize.value+'%';drawPreview();});
 sX.addEventListener('input',()=>{pos.cx=sX.value/100;vX.textContent=sX.value+'%';drawPreview();});
 sY.addEventListener('input',()=>{pos.cy=sY.value/100;vY.textContent=sY.value+'%';drawPreview();});
-document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy:0.48,size:0.35};syncSliders();drawPreview();});
+sRot.addEventListener('input',()=>{pos.rot=+sRot.value;vRot.textContent=sRot.value+'°';drawPreview();});
+sSize.addEventListener('change',pushHistory);
+sX.addEventListener('change',pushHistory);
+sY.addEventListener('change',pushHistory);
+sRot.addEventListener('change',pushHistory);
+document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy:0.48,size:0.35,rot:0};syncSliders();drawPreview();pushHistory();});
+document.getElementById('rotate90Btn').addEventListener('click',()=>{
+  if(!designImg)return;
+  // Nudges rotation in clean 15° steps, wrapping back into the slider's
+  // -45..45 range (e.g. 45 -> -45) rather than a literal 90° turn, since a
+  // full quarter-turn is rarely useful for placing a design on a shirt.
+  let r=(pos.rot||0)+15;
+  if(r>45)r-=90;
+  pos.rot=r;
+  syncSliders();drawPreview();pushHistory();
+});
 
 // ── Drag on canvas ────────────────────────────────────────────────────────
 let dragging=false,dsx,dsy,dcx,dcy;
@@ -673,8 +761,58 @@ document.addEventListener('mousemove',e=>{
   pos.cy=Math.max(0,Math.min(1,dcy+(e.clientY-rect.top-dsy)/CH));
   syncSliders();drawPreview();
 });
-document.addEventListener('mouseup',()=>dragging=false);
-canvas.addEventListener('wheel',e=>{if(!designImg)return;pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));syncSliders();drawPreview();e.preventDefault();},{passive:false});
+document.addEventListener('mouseup',()=>{if(dragging){dragging=false;pushHistory();}});
+let wheelHistTimer=null;
+canvas.addEventListener('wheel',e=>{
+  if(!designImg)return;
+  pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));
+  syncSliders();drawPreview();
+  e.preventDefault();
+  clearTimeout(wheelHistTimer);
+  wheelHistTimer=setTimeout(pushHistory,400);
+},{passive:false});
+
+// ── Undo/Redo history ────────────────────────────────────────────────────
+// Snapshots only the design placement (position/size/rotation) and shirt
+// color — not the uploaded file/photo — pushed on discrete, finished
+// gestures (slider release, drag release, color pick) rather than on every
+// continuous input/mousemove event, so the stack doesn't flood.
+let history=[],historyIndex=-1;
+function snapshot(){return{cx:pos.cx,cy:pos.cy,size:pos.size,rot:pos.rot||0,color:shirtColor};}
+function resetHistory(){history=[snapshot()];historyIndex=0;updateHistoryButtons();}
+function pushHistory(){
+  const snap=snapshot();
+  const cur=history[historyIndex];
+  if(cur&&cur.cx===snap.cx&&cur.cy===snap.cy&&cur.size===snap.size&&cur.rot===snap.rot&&cur.color===snap.color)return;
+  history=history.slice(0,historyIndex+1);
+  history.push(snap);
+  historyIndex=history.length-1;
+  updateHistoryButtons();
+}
+function applySnapshot(snap){
+  pos.cx=snap.cx;pos.cy=snap.cy;pos.size=snap.size;pos.rot=snap.rot;
+  shirtColor=snap.color;
+  document.getElementById('colorPicker').value=shirtColor;
+  document.getElementById('colorHex').value=shirtColor;
+  presetsEl.querySelectorAll('.preset').forEach((p,i)=>{
+    p.classList.toggle('active',PRESETS[i].hex===shirtColor);
+  });
+  syncSliders();
+  drawPreview();
+}
+function updateHistoryButtons(){
+  document.getElementById('undoBtn').disabled=historyIndex<=0;
+  document.getElementById('redoBtn').disabled=historyIndex>=history.length-1;
+  document.getElementById('rotate90Btn').disabled=!designImg;
+}
+document.getElementById('undoBtn').addEventListener('click',()=>{
+  if(historyIndex<=0)return;
+  historyIndex--;applySnapshot(history[historyIndex]);updateHistoryButtons();
+});
+document.getElementById('redoBtn').addEventListener('click',()=>{
+  if(historyIndex>=history.length-1)return;
+  historyIndex++;applySnapshot(history[historyIndex]);updateHistoryButtons();
+});
 
 // ── Generate ──────────────────────────────────────────────────────────────
 document.getElementById('renderBtn').addEventListener('click',async()=>{
@@ -694,7 +832,7 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   const form=new FormData();
   form.append('file',file);form.append('x',sx);form.append('y',sy);
   form.append('w',sw);form.append('h',sh);form.append('color',shirtColor);
-  form.append('mockup',currentMockup);
+  form.append('mockup',currentMockup);form.append('rot',pos.rot||0);
   try{
     const res=await fetch('/render',{method:'POST',body:form});
     if(res.status===401){openAuthModal('login');st.className='';st.textContent='';return;}
