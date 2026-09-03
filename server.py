@@ -41,9 +41,6 @@ class MockupEngine:
         self.shirt_mask = np.array(Image.open(os.path.join(mockup_dir,"shirt_full_mask.png")).convert("L")).astype(np.float32)/255
         self.shirt_mask_3d = self.shirt_mask[:,:,np.newaxis]
 
-        # Print zone mask (where design goes)
-        self.print_mask = np.array(Image.open(os.path.join(mockup_dir,"tshirt_mask.png")).convert("L")).astype(np.float32)/255
-
         # Shirt color (white by default = 255,255,255)
         self.shirt_color = np.array([1.0, 1.0, 1.0])
 
@@ -107,7 +104,7 @@ class MockupEngine:
         result[:,:,:3] = result[:,:,:3]*(1-m) + color_arr[:,:,:3]*m
         result[:,:,3] = np.maximum(result[:,:,3], self.shirt_mask)
 
-        # === Step 3: Warp design onto shirt (clipped by print_mask) ===
+        # === Step 3: Warp design onto shirt (clipped by shirt_mask) ===
         src_canvas = Image.new("RGBA",(sw,sh),(0,0,0,0))
         src_canvas.paste(design_img.resize((w,h),Image.LANCZOS),(x,y))
         dw,dh = src_canvas.size
