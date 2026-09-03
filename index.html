@@ -138,7 +138,7 @@ const CW=920,CH=1380;
 let SRC_W=2342,SRC_H=2616;
 let currentMockup='mockup_package';
 let shirtColor='#ffffff';
-let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null;
+let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null,dispData=null;
 let designImg=null,file=null;
 let pos={cx:0.5,cy:0.48,size:0.35};
 
@@ -227,7 +227,7 @@ const BLEND_FNS={
 
 // ── Mockup assets ─────────────────────────────────────────────────────────
 function loadMockupAssets(name){
-  basePixels=null;maskPixels=null;warpedPixels=null;warpMap=null;overlaysData=null;
+  basePixels=null;maskPixels=null;warpedPixels=null;warpMap=null;overlaysData=null;dispData=null;
   const si=new Image();
   si.crossOrigin='anonymous';
   si.onload=()=>{
@@ -253,6 +253,29 @@ function loadMockupAssets(name){
       };
       oi.src='/'+name+'/'+ov.file+'?v='+Date.now();
     });
+
+    // Fabric-texture displacement (Photoshop Displace filter equivalent, mirrors
+    // server.py's _apply_displace). Scales are defined in full-res canvas units,
+    // so they're scaled down by CW/canvas.width for this preview's resolution.
+    const disp=pkg.displace;
+    if(disp){
+      const ratio=CW/pkg.canvas.width;
+      const di=new Image();
+      di.crossOrigin='anonymous';
+      di.onload=()=>{
+        const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
+        const tg=tmp.getContext('2d');tg.drawImage(di,0,0,CW,CH);
+        const raw=tg.getImageData(0,0,CW,CH).data;
+        const gray=new Float32Array(CW*CH);
+        for(let i=0;i<CW*CH;i++){
+          const s=i*4;
+          gray[i]=(0.299*raw[s]+0.587*raw[s+1]+0.114*raw[s+2])/255;
+        }
+        dispData={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
+        drawPreview();
+      };
+      di.src='/'+name+'/'+disp.map+'?v='+Date.now();
+    }
   });
   const mi=new Image();
   mi.crossOrigin='anonymous';
@@ -329,7 +352,15 @@ function drawPreview(){
     const half=pos.size/2;
     for(let py=0;py<CH;py++){
       for(let px=0;px<CW;px++){
-        const wi=(py*CW+px)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
+        let qx=px,qy=py;
+        if(dispData){
+          const g=dispData.gray[py*CW+px];
+          const dxs=(g-0.5)*2*dispData.hScale;
+          const dys=(g-0.5)*2*dispData.vScale;
+          qx=Math.min(CW-1,Math.max(0,Math.round(px-dxs)));
+          qy=Math.min(CH-1,Math.max(0,Math.round(py-dys)));
+        }
+        const wi=(qy*CW+qx)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
         if(su<0)continue;
         const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
         if(du<0||du>=1||dv<0||dv>=1)continue;
