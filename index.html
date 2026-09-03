@@ -6,16 +6,20 @@
   <title>Mockup Generator</title>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;--accent:#e8ff47;--text:#f0f0f0;--muted:#555}
+    :root{--bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;--accent:#e93323;--text:#f0f0f0;--muted:#555}
     body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px;gap:20px}
     h1{font-size:28px;font-weight:700;letter-spacing:-1px}
     h1 span{color:var(--accent)}
     .sub{color:var(--muted);font-size:13px;margin-top:4px;text-align:center}
     .main{display:flex;gap:24px;width:100%;max-width:1060px;align-items:flex-start}
-    .preview-wrap{flex:0 0 auto;width:460px}
+    .left-col{flex:0 0 auto;width:460px;display:flex;flex-direction:column;gap:12px}
     #previewCanvas{width:460px;height:690px;border-radius:12px;display:block;cursor:crosshair;background:#222}
     #previewCanvas.has-design{cursor:move}
-    .sidebar{flex:1;display:flex;flex-direction:column;gap:14px}
+    .result-col{flex:1;min-width:280px;position:sticky;top:16px}
+    .controls-compact{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+    .ctrl-section{padding-top:12px;border-top:1px solid var(--border)}
+    .ctrl-section:first-child{padding-top:0;border-top:none}
+    .result-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:50px 12px;line-height:1.6}
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
     .card-body{padding:16px}
@@ -45,13 +49,13 @@
     .plan-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
     .plan-row:last-child{border-bottom:none}
     .status-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
-    .status-pill.active{background:rgba(232,255,71,.12);color:var(--accent)}
+    .status-pill.active{background:rgba(233,51,35,.14);color:var(--accent)}
     .status-pill.none,.status-pill.cancelled,.status-pill.expired{background:rgba(255,255,255,.06);color:var(--muted)}
-    .drop{border:2px dashed var(--border);border-radius:8px;padding:24px 12px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
+    .drop{border:2px dashed var(--border);border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
     .drop:hover{border-color:var(--accent)}
     .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-    .drop-icon{font-size:26px;display:block;margin-bottom:6px}
-    .drop-text{font-size:12px;color:var(--muted);line-height:1.5}
+    .drop-icon{font-size:18px;display:inline-block;margin-right:6px;vertical-align:middle}
+    .drop-text{font-size:12px;color:var(--muted);line-height:1.4;display:inline-block;vertical-align:middle;text-align:left}
     .drop-text strong{color:var(--accent)}
     .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
     .preset{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s;flex-shrink:0}
@@ -67,7 +71,7 @@
     .row input[type=range]{flex:1;accent-color:var(--accent)}
     .row span{width:36px;text-align:right;font-size:12px}
     .hint{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
-    .btn{width:100%;padding:13px;background:var(--accent);color:#111;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .2s}
+    .btn{width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .2s}
     .btn:disabled{opacity:.3;cursor:not-allowed}
     .btn:hover:not(:disabled){opacity:.85}
     .btn2{width:100%;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;transition:border-color .2s,color .2s}
@@ -79,7 +83,7 @@
     .status{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;min-height:16px}
     .status.err{color:#f66}.status.ok{color:var(--accent)}
     @keyframes spin{to{transform:rotate(360deg)}}
-    .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(232,255,71,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
+    .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(233,51,35,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:4px}
   </style>
 </head>
 <body>
@@ -130,26 +134,20 @@
 </div>
 
 <div class="main" id="editorView" style="display:none">
-  <div class="preview-wrap">
+  <div class="left-col">
     <button class="back-btn" id="backBtn">← Back to designs</button>
     <canvas id="previewCanvas" width="920" height="1380"></canvas>
-  </div>
-  <div class="sidebar">
 
-    <div class="card">
-      <div class="card-title">Upload Design</div>
-      <div class="card-body">
+    <div class="controls-compact">
+      <div class="ctrl-section">
         <div class="drop" id="drop">
           <input type="file" id="fileInput" accept="image/*">
           <span class="drop-icon" id="dropIcon">🎨</span>
-          <div class="drop-text" id="dropText"><strong>Click to upload</strong> or drag & drop<br>PNG with transparency works best</div>
+          <span class="drop-text" id="dropText"><strong>Click to upload</strong> or drag & drop</span>
         </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-title">Shirt Color</div>
-      <div class="card-body">
+      <div class="ctrl-section">
         <div class="presets" id="presets"></div>
         <div class="color-row">
           <label>Custom</label>
@@ -157,26 +155,28 @@
           <input type="text" id="colorHex" value="#ffffff" maxlength="7">
         </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-title">Position & Size</div>
-      <div class="card-body">
+      <div class="ctrl-section">
         <div class="sliders">
           <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
           <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
           <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="48"><span id="vY">48%</span></div>
         </div>
-        <p class="hint">💡 Drag design on shirt · Scroll to resize</p>
         <button class="btn2" id="resetBtn">↺ Reset</button>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="card-title">Export</div>
-      <div class="card-body">
+      <div class="ctrl-section">
         <button class="btn" id="renderBtn" disabled>Generate High-Res →</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="result-col">
+    <div class="card">
+      <div class="card-title">High-Res Result</div>
+      <div class="card-body">
         <div class="status" id="status"></div>
+        <p class="result-placeholder" id="resultPlaceholder">Your high-res mockup will appear here after you click Generate.</p>
         <img id="resultImg" alt="result">
         <a class="dl" id="dlBtn" download="mockup.png">↓ Download PNG</a>
       </div>
@@ -689,6 +689,7 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   st.className='status';st.innerHTML='<span class="spin"></span>Rendering…';
   document.getElementById('resultImg').classList.remove('show');
   document.getElementById('dlBtn').classList.remove('show');
+  document.getElementById('resultPlaceholder').style.display='none';
   const form=new FormData();
   form.append('file',file);form.append('x',sx);form.append('y',sy);
   form.append('w',sw);form.append('h',sh);form.append('color',shirtColor);
@@ -702,7 +703,7 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
     document.getElementById('resultImg').src=url;document.getElementById('resultImg').classList.add('show');
     document.getElementById('dlBtn').href=url;document.getElementById('dlBtn').classList.add('show');
     st.className='status ok';st.textContent='✓ Done';
-  }catch(err){st.className='status err';st.textContent='✗ '+err.message;}
+  }catch(err){st.className='status err';st.textContent='✗ '+err.message;document.getElementById('resultPlaceholder').style.display='';}
   finally{document.getElementById('renderBtn').disabled=false;}
 });
 </script>
