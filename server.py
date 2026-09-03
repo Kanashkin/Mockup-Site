@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 from PIL import Image
 from scipy.interpolate import griddata
+from scipy.ndimage import map_coordinates
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -50,6 +51,18 @@ class MockupEngine:
             img = np.array(Image.open(os.path.join(mockup_dir,ov["file"])).convert("RGBA")).astype(np.float32)/255
             self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
 
+        # Displacement map (Photoshop Filter > Distort > Displace, applied to the
+        # design after it's warped onto the shirt, in canvas space). Optional.
+        self.displace = None
+        disp = pkg.get("displace")
+        if disp:
+            dmap = np.array(Image.open(os.path.join(mockup_dir,disp["map"])).convert("L")).astype(np.float32)/255
+            self.displace = {
+                "map": dmap,
+                "h_scale": disp.get("h_scale", 10),
+                "v_scale": disp.get("v_scale", 10),
+            }
+
         # Warp setup
         src_w = warp["bounds"]["right"]
         src_h = warp["bounds"]["bottom"]
@@ -80,6 +93,23 @@ class MockupEngine:
         self._ry = griddata(displaced,reg_y,rsp,method="cubic")
         self._ridx = ridx
         print(f"Ready. Canvas: {cw}x{ch}")
+
+    def _apply_displace(self, rgba):
+        """Photoshop Filter > Distort > Displace, 'Stretch To Fit' + 'Repeat Edge
+        Pixels': map value 128 (0.5) = no shift, 0 = -scale, 255 = +scale, same
+        channel drives both axes for a grayscale map. Backward-sampling (pull)."""
+        d = self.displace
+        h, w = rgba.shape[0], rgba.shape[1]
+        dmap = d["map"]
+        dx = (dmap - 0.5) * 2 * d["h_scale"]
+        dy = (dmap - 0.5) * 2 * d["v_scale"]
+        ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+        src_x = np.clip(xs - dx, 0, w - 1)
+        src_y = np.clip(ys - dy, 0, h - 1)
+        out = np.empty_like(rgba)
+        for c in range(rgba.shape[2]):
+            out[:, :, c] = map_coordinates(rgba[:, :, c], [src_y, src_x], order=1, mode="nearest")
+        return out
 
     def render(self, design_img, x=0, y=0, w=None, h=None, color="#ffffff"):
         sw,sh = int(self.src_w),int(self.src_h)
@@ -117,6 +147,10 @@ class MockupEngine:
         warped[fi//self.canvas_w,fi%self.canvas_w] = design_arr[ny[valid].astype(int),nx[valid].astype(int)]
         # Clip to shirt mask
         warped[:,:,3] = warped[:,:,3] * self.shirt_mask
+
+        # Fabric-texture displacement (Photoshop Displace filter equivalent)
+        if self.displace:
+            warped = self._apply_displace(warped)
 
         # Multiply blend design onto shirt
         alpha = warped[:,:,3:4]/255
