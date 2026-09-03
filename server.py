@@ -12,6 +12,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 
 import paypal
+import google_oauth
 from db import init_db, get_db, User, Subscription
 from auth import (
     hash_password, verify_password, validate_email, validate_password,
@@ -249,6 +250,54 @@ def login(request: Request, email: str = Form(...), password: str = Form(...), d
 def logout(request: Request):
     clear_user_session(request)
     return {"ok": True}
+
+
+@app.get("/api/auth/google/login")
+def google_login(request: Request):
+    if not google_oauth.configured():
+        raise HTTPException(503, "Google sign-in is not configured yet")
+    redirect_uri = f"{str(request.base_url).rstrip('/')}/api/auth/google/callback"
+    state = google_oauth.new_state()
+    request.session["google_oauth_state"] = state
+    return RedirectResponse(google_oauth.authorize_url(redirect_uri, state))
+
+
+@app.get("/api/auth/google/callback")
+def google_callback(request: Request, code: str = None, state: str = None, error: str = None,
+                     db: Session = Depends(get_db)):
+    if error:
+        return RedirectResponse(f"/?auth=error")
+    expected_state = request.session.pop("google_oauth_state", None)
+    if not code or not state or not expected_state or state != expected_state:
+        return RedirectResponse(f"/?auth=error")
+    redirect_uri = f"{str(request.base_url).rstrip('/')}/api/auth/google/callback"
+    try:
+        tokens = google_oauth.exchange_code(code, redirect_uri)
+        info = google_oauth.get_userinfo(tokens["access_token"])
+    except Exception:
+        return RedirectResponse(f"/?auth=error")
+
+    google_id = info.get("sub")
+    email = (info.get("email") or "").strip().lower()
+    if not google_id or not email:
+        return RedirectResponse(f"/?auth=error")
+
+    user = db.query(User).filter(User.google_id == google_id).first()
+    if not user:
+        # Link to an existing email/password account if one matches, so
+        # someone who registered manually can also use "Continue with
+        # Google" for the same account instead of getting a duplicate.
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.google_id = google_id
+        else:
+            user = User(email=email, google_id=google_id, password_hash=None)
+            db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    create_user_session(request, user.id)
+    return RedirectResponse("/?auth=success")
 
 
 @app.get("/api/me")
