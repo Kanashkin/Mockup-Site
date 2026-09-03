@@ -755,11 +755,16 @@ function drawPreview(){
         // so without this the design can bleed onto the background/pants.
         const da=(dd[di+3]/255)*maskPixels[py*CW+px];if(da<0.01)continue;
         const oi=(py*CW+px)*4;
+        // Alpha-composite with the design's own true colors (mirrors
+        // server.py) — not multiplied against the shirt color underneath,
+        // which used to tint the whole design toward whatever shirt color
+        // was picked. Fabric shading still comes through via the overlay
+        // pass below, which covers the design too.
         const sr=od[oi]/255,sg=od[oi+1]/255,sb=od[oi+2]/255;
         const dr=dd[di]/255,dg=dd[di+1]/255,db=dd[di+2]/255;
-        od[oi]=Math.round((sr*(1-da)+sr*dr*da)*255);
-        od[oi+1]=Math.round((sg*(1-da)+sg*dg*da)*255);
-        od[oi+2]=Math.round((sb*(1-da)+sb*db*da)*255);
+        od[oi]=Math.round((sr*(1-da)+dr*da)*255);
+        od[oi+1]=Math.round((sg*(1-da)+dg*da)*255);
+        od[oi+2]=Math.round((sb*(1-da)+db*da)*255);
       }
     }
     ctx.putImageData(sd,0,0);

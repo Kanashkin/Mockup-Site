@@ -206,10 +206,15 @@ class MockupEngine:
         if self.displace:
             warped = self._apply_displace(warped)
 
-        # Multiply blend design onto shirt
+        # Alpha-composite the design onto the shirt with its own true colors —
+        # NOT multiplied against the (possibly colored) shirt underneath, which
+        # was tinting the whole design toward whatever shirt color was picked
+        # (e.g. a green shirt turning a black/white design green). Fabric
+        # folds/shading still come through afterward via the overlay layers
+        # below, which apply on top of the design too.
         alpha = warped[:,:,3:4]/255
         design_rgb = warped[:,:,:3]/255
-        result[:,:,:3] = result[:,:,:3]*(1-alpha) + result[:,:,:3]*design_rgb*alpha
+        result[:,:,:3] = result[:,:,:3]*(1-alpha) + design_rgb*alpha
 
         # === Step 4: Overlay layers (clipped to shirt mask) ===
         for img_u8,opacity,blend_mode in self.overlays:
