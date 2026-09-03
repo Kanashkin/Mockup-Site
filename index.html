@@ -19,8 +19,8 @@
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
     .card-body{padding:16px}
-    .mockup-selector{display:flex;gap:10px}
-    .mockup-btn{flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
+    .mockup-selector{display:flex;flex-wrap:wrap;gap:10px}
+    .mockup-btn{flex:1 1 100px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
     .mockup-btn:hover{border-color:var(--accent)}
     .mockup-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(232,255,71,0.06)}
     .mockup-btn img{width:100%;height:70px;object-fit:cover;object-position:top;border-radius:4px;margin-bottom:6px;display:block}
@@ -80,6 +80,36 @@
           </div>
           <div class="mockup-btn" id="mock3" onclick="selectMockup('mockup3_package','mock3')">
             <img src="/mockup3_package/shirt_preview.png" alt="">Mockup 3
+          </div>
+          <div class="mockup-btn" id="mock4" onclick="selectMockup('mockup4_package','mock4')">
+            <img src="/mockup4_package/shirt_preview.png" alt="">Mockup 4
+          </div>
+          <div class="mockup-btn" id="mock5" onclick="selectMockup('mockup5_package','mock5')">
+            <img src="/mockup5_package/shirt_preview.png" alt="">Mockup 5
+          </div>
+          <div class="mockup-btn" id="mock6" onclick="selectMockup('mockup6_package','mock6')">
+            <img src="/mockup6_package/shirt_preview.png" alt="">Mockup 6
+          </div>
+          <div class="mockup-btn" id="mock7" onclick="selectMockup('mockup7_package','mock7')">
+            <img src="/mockup7_package/shirt_preview.png" alt="">Mockup 7
+          </div>
+          <div class="mockup-btn" id="mock8" onclick="selectMockup('mockup8_package','mock8')">
+            <img src="/mockup8_package/shirt_preview.png" alt="">Mockup 8
+          </div>
+          <div class="mockup-btn" id="mock9" onclick="selectMockup('mockup9_package','mock9')">
+            <img src="/mockup9_package/shirt_preview.png" alt="">Mockup 9
+          </div>
+          <div class="mockup-btn" id="mock10" onclick="selectMockup('mockup10_package','mock10')">
+            <img src="/mockup10_package/shirt_preview.png" alt="">Mockup 10
+          </div>
+          <div class="mockup-btn" id="mock11" onclick="selectMockup('mockup11_package','mock11')">
+            <img src="/mockup11_package/shirt_preview.png" alt="">Mockup 11
+          </div>
+          <div class="mockup-btn" id="mock12" onclick="selectMockup('mockup12_package','mock12')">
+            <img src="/mockup12_package/shirt_preview.png" alt="">Mockup 12
+          </div>
+          <div class="mockup-btn" id="mock13" onclick="selectMockup('mockup13_package','mock13')">
+            <img src="/mockup13_package/shirt_preview.png" alt="">Mockup 13
           </div>
         </div>
       </div>
@@ -365,7 +395,10 @@ function drawPreview(){
         const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
         if(du<0||du>=1||dv<0||dv>=1)continue;
         const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
-        const da=dd[di+3]/255;if(da<0.01)continue;
+        // clip to shirt silhouette (mirrors server.py's warped[:,:,3] *= self.shirt_mask) —
+        // the warp lookup's valid region is padded wider than the actual shirt shape,
+        // so without this the design can bleed onto the background/pants.
+        const da=(dd[di+3]/255)*maskPixels[py*CW+px];if(da<0.01)continue;
         const oi=(py*CW+px)*4;
         const sr=od[oi]/255,sg=od[oi+1]/255,sb=od[oi+2]/255;
         const dr=dd[di]/255,dg=dd[di+1]/255,db=dd[di+2]/255;

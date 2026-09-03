@@ -35,8 +35,10 @@ class MockupEngine:
         self.canvas_h = pkg["canvas"]["height"]
         warp = pkg["warp"]
 
-        # Background photo
-        self.bg = np.array(Image.open(os.path.join(mockup_dir,"shirt_base.png")).convert("RGBA")).astype(np.float32)/255
+        # Background photo — kept as uint8 (not the /255 float copy) so each
+        # engine's resident memory stays ~4x smaller; render() converts to
+        # float on the fly for the (infrequent, one-per-request) compositing.
+        self.bg_u8 = np.array(Image.open(os.path.join(mockup_dir,"shirt_base.png")).convert("RGBA"))
 
         # T-Shirt group mask (shirt silhouette)
         self.shirt_mask = np.array(Image.open(os.path.join(mockup_dir,"shirt_full_mask.png")).convert("L")).astype(np.float32)/255
@@ -45,11 +47,11 @@ class MockupEngine:
         # Shirt color (white by default = 255,255,255)
         self.shirt_color = np.array([1.0, 1.0, 1.0])
 
-        # Overlay layers
+        # Overlay layers — also kept as uint8 for the same memory reason.
         self.overlays = []
         for ov in pkg["overlays"]:
-            img = np.array(Image.open(os.path.join(mockup_dir,ov["file"])).convert("RGBA")).astype(np.float32)/255
-            self.overlays.append((img, ov["opacity"], ov["blend_mode"]))
+            img_u8 = np.array(Image.open(os.path.join(mockup_dir,ov["file"])).convert("RGBA"))
+            self.overlays.append((img_u8, ov["opacity"], ov["blend_mode"]))
 
         # Displacement map (Photoshop Filter > Distort > Displace, applied to the
         # design after it's warped onto the shirt, in canvas space). Optional.
@@ -81,16 +83,41 @@ class MockupEngine:
 
         print("Precomputing warp map...")
         cw,ch = self.canvas_w,self.canvas_h
-        ys,xs = np.mgrid[0:ch,0:cw]
-        cp = np.column_stack([xs.ravel().astype(np.float64),ys.ravel().astype(np.float64)])
-        cp_h = np.concatenate([cp,np.ones((len(cp),1))],axis=1)
-        sp_h = (H_inv@cp_h.T).T
-        src_x = sp_h[:,0]/sp_h[:,2]; src_y = sp_h[:,1]/sp_h[:,2]
-        in_r = (src_x>=-300)&(src_x<=src_w+300)&(src_y>=-300)&(src_y<=src_h+300)
-        ridx = np.where(in_r)[0]
-        rsp = np.column_stack([src_x[in_r],src_y[in_r]])
-        self._rx = griddata(displaced,reg_x,rsp,method="cubic")
-        self._ry = griddata(displaced,reg_y,rsp,method="cubic")
+
+        # Compute the warp on a reduced grid (cheap: a few hundred thousand
+        # points regardless of canvas size) instead of per-pixel cubic
+        # griddata over the full canvas (which can be many millions of
+        # points for a large canvas/warp region and was blowing up memory
+        # and taking minutes on some mockups). The reduced grid is then
+        # upsampled to full canvas resolution with cheap bilinear resize —
+        # visually indistinguishable since the warp itself is a smooth,
+        # low-frequency deformation defined by just 16 control points.
+        rw,rh = 512,768
+        ys_r,xs_r = np.mgrid[0:rh,0:rw]
+        px_r = (xs_r.ravel()+0.5)/rw*cw
+        py_r = (ys_r.ravel()+0.5)/rh*ch
+        cp_h_r = np.column_stack([px_r,py_r,np.ones_like(px_r)])
+        sp_h_r = (H_inv@cp_h_r.T).T
+        src_x_r = sp_h_r[:,0]/sp_h_r[:,2]; src_y_r = sp_h_r[:,1]/sp_h_r[:,2]
+        in_r_r = (src_x_r>=-300)&(src_x_r<=src_w+300)&(src_y_r>=-300)&(src_y_r<=src_h+300)
+        rx_r = np.full(rw*rh,np.nan); ry_r = np.full(rw*rh,np.nan)
+        ridx_r = np.where(in_r_r)[0]
+        rsp_r = np.column_stack([src_x_r[in_r_r],src_y_r[in_r_r]])
+        rxv = griddata(displaced,reg_x,rsp_r,method="cubic")
+        ryv = griddata(displaced,reg_y,rsp_r,method="cubic")
+        valid_r = ~(np.isnan(rxv)|np.isnan(ryv))
+        rx_r[ridx_r[valid_r]] = rxv[valid_r]
+        ry_r[ridx_r[valid_r]] = ryv[valid_r]
+        rx_grid = rx_r.reshape(rh,rw); ry_grid = ry_r.reshape(rh,rw)
+        valid_grid = (~np.isnan(rx_grid)).astype(np.float32)
+
+        rx_full = cv2.resize(np.nan_to_num(rx_grid,nan=0.0),(cw,ch),interpolation=cv2.INTER_LINEAR)
+        ry_full = cv2.resize(np.nan_to_num(ry_grid,nan=0.0),(cw,ch),interpolation=cv2.INTER_LINEAR)
+        valid_full = cv2.resize(valid_grid,(cw,ch),interpolation=cv2.INTER_LINEAR) > 0.5
+
+        ridx = np.where(valid_full.ravel())[0]
+        self._rx = rx_full.ravel()[ridx]
+        self._ry = ry_full.ravel()[ridx]
         self._ridx = ridx
         print(f"Ready. Canvas: {cw}x{ch}")
 
@@ -120,7 +147,7 @@ class MockupEngine:
             x, y = pz['x0'], pz['y0']
 
         # === Step 1: Background ===
-        result = self.bg.copy()
+        result = self.bg_u8.astype(np.float32)/255
 
         # === Step 2: Shirt color fill (clipped to shirt mask) ===
         r = int(color[1:3],16)/255
@@ -158,9 +185,10 @@ class MockupEngine:
         result[:,:,:3] = result[:,:,:3]*(1-alpha) + result[:,:,:3]*design_rgb*alpha
 
         # === Step 4: Overlay layers (clipped to shirt mask) ===
-        for img,opacity,blend_mode in self.overlays:
+        for img_u8,opacity,blend_mode in self.overlays:
             fn = BLEND_FNS.get(blend_mode)
             if fn:
+                img = img_u8.astype(np.float32)/255
                 blended = fn(result[:,:,:3], img[:,:,:3])
                 effective = opacity * img[:,:,3:4] * self.shirt_mask_3d
                 result[:,:,:3] = result[:,:,:3]*(1-effective) + blended*effective
@@ -169,7 +197,10 @@ class MockupEngine:
 
 # Load engines
 ENGINES = {}
-for name in ["mockup_package","mockup2_package","mockup3_package"]:
+for name in ["mockup_package","mockup2_package","mockup3_package","mockup4_package",
+             "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
+             "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
+             "mockup13_package"]:
     d = os.path.join(BASE_DIR, name)
     if os.path.exists(os.path.join(d, "mockup.json")):
         ENGINES[name] = MockupEngine(d)
