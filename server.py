@@ -26,6 +26,18 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # every deploy) if someone forgets to set it; never rely on it in production.
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "dev-insecure-secret-key"))
 
+def public_base_url(request: Request) -> str:
+    """request.base_url reflects the scheme Railway's internal proxy used to
+    reach this process, which is plain http even though the site is only
+    ever visited over https — using it as-is breaks anything that must
+    match an exact registered URL (Google OAuth's redirect_uri, PayPal's
+    return/cancel URLs). X-Forwarded-Proto carries the scheme the browser
+    actually used, so prefer that when the proxy sets it."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    return f"{proto}://{host}"
+
+
 BASE_DIR = os.path.dirname(__file__)
 init_db()
 
@@ -256,7 +268,7 @@ def logout(request: Request):
 def google_login(request: Request):
     if not google_oauth.configured():
         raise HTTPException(503, "Google sign-in is not configured yet")
-    redirect_uri = f"{str(request.base_url).rstrip('/')}/api/auth/google/callback"
+    redirect_uri = f"{public_base_url(request)}/api/auth/google/callback"
     state = google_oauth.new_state()
     request.session["google_oauth_state"] = state
     return RedirectResponse(google_oauth.authorize_url(redirect_uri, state))
@@ -270,7 +282,7 @@ def google_callback(request: Request, code: str = None, state: str = None, error
     expected_state = request.session.pop("google_oauth_state", None)
     if not code or not state or not expected_state or state != expected_state:
         return RedirectResponse(f"/?auth=error")
-    redirect_uri = f"{str(request.base_url).rstrip('/')}/api/auth/google/callback"
+    redirect_uri = f"{public_base_url(request)}/api/auth/google/callback"
     try:
         tokens = google_oauth.exchange_code(code, redirect_uri)
         info = google_oauth.get_userinfo(tokens["access_token"])
@@ -322,7 +334,7 @@ def create_subscription(request: Request, user: User = Depends(require_user), db
     plan_id = os.environ.get("PAYPAL_PLAN_ID")
     if not paypal.configured() or not plan_id:
         raise HTTPException(503, "Payments are not configured yet")
-    base = str(request.base_url).rstrip("/")
+    base = public_base_url(request)
     result = paypal.create_subscription(
         plan_id=plan_id,
         return_url=f"{base}/api/subscription/return",
