@@ -229,7 +229,7 @@ class MockupEngine:
 
 # Load engines
 ENGINES = {}
-for name in ["mockup_package","mockup2_package","mockup3_package","mockup4_package",
+for name in ["mockup3_package","mockup4_package",
              "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
              "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
              "mockup13_package"]:
@@ -420,7 +420,7 @@ async def render_mockup(
     w: int = Form(None), h: int = Form(None),
     rot: float = Form(0),
     color: str = Form("#ffffff"),
-    mockup: str = Form("mockup_package"),
+    mockup: str = Form("mockup3_package"),
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
