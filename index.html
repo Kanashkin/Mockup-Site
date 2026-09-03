@@ -248,6 +248,11 @@ let shirtColor='#ffffff';
 let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null,dispData=null;
 let designImg=null,file=null;
 let pos={cx:0.5,cy:0.48,size:0.35,rot:0};
+// The current mockup's own natural default placement (from its print
+// zone) — recomputed on every mockup load, since each photo's chest area
+// sits somewhere different in the source image. Reset goes back to this,
+// not to a single hardcoded spot that's only right for some photos.
+let mockupDefaultPos={cx:0.5,cy:0.48,size:0.35,rot:0};
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
@@ -374,20 +379,39 @@ function previewName(fname){
 // several "You might like" photos quickly) can detect it's stale and drop
 // its results instead of overwriting a newer one.
 let mockupLoadSeq=0;
-function loadMockupAssets(name){
+// resetPosition: true when freshly opening a mockup from the gallery (place
+// the design at THIS mockup's own print-zone center — each photo is framed
+// differently, so a single hardcoded center lands in the wrong spot on most
+// of them), false when switching photos via "You might like" (keep the
+// user's current placement so their design carries over unchanged).
+function loadMockupAssets(name,resetPosition){
   const reqId=++mockupLoadSeq;
   // Load everything for the new mockup into local variables and only swap
   // them into the live state once ALL of it is ready — keeping the
   // previous mockup fully rendered (with its shading/overlays) on screen
   // in the meantime, instead of nulling state up front and redrawing a
   // flat, un-shaded shirt while the new assets are still loading in.
-  let newBase=null,newMask=null,newWarped=null,newWarpMap=null,newOverlays=[],newDisp=null,newSrcW=0,newSrcH=0;
+  let newBase=null,newMask=null,newWarped=null,newWarpMap=null,newOverlays=[],newDisp=null,newSrcW=0,newSrcH=0,newPrintZone=null;
   let pending=4; // base image, mask image, warp_data.json, mockup.json (overlays+displace resolve as one unit)
   function finish(){
     if(--pending>0)return;
     if(reqId!==mockupLoadSeq)return; // a newer loadMockupAssets call has since superseded this one
     basePixels=newBase;maskPixels=newMask;warpedPixels=newWarped;warpMap=newWarpMap;
     overlaysData=newOverlays;dispData=newDisp;SRC_W=newSrcW;SRC_H=newSrcH;
+    // Recompute this mockup's own natural default (from its print zone) on
+    // every load, not just when resetting placement now, so the "Reset"
+    // button always goes back to somewhere sensible for whichever photo is
+    // currently open instead of one hardcoded spot that's wrong for most.
+    mockupDefaultPos=(newPrintZone&&newSrcW&&newSrcH)?{
+      cx:(newPrintZone.x0+newPrintZone.x1)/2/newSrcW,
+      cy:(newPrintZone.y0+newPrintZone.y1)/2/newSrcH,
+      size:0.35,rot:0,
+    }:{cx:0.5,cy:0.48,size:0.35,rot:0};
+    if(resetPosition){
+      Object.assign(pos,mockupDefaultPos);
+      syncSliders();
+      resetHistory();
+    }
     drawPreview();
   }
 
@@ -421,6 +445,7 @@ function loadMockupAssets(name){
   });
 
   fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
+    newPrintZone=pkg.print_zone||null;
     const list=pkg.overlays||[];
     const disp=pkg.displace;
     let subPending=list.length+(disp?1:0);
@@ -510,9 +535,8 @@ function openEditor(name){
   currentMockup=name;
   document.getElementById('editorView').style.display='flex';
   document.getElementById('subText').textContent='Upload your design — position it and pick a color';
-  loadMockupAssets(name);
+  loadMockupAssets(name,true);
   renderLikeGrid();
-  resetHistory();
   closeFlyouts();
 }
 function renderLikeGrid(){
@@ -539,7 +563,7 @@ function renderLikeGrid(){
 function switchMockup(newId){
   if(newId===currentMockup)return;
   currentMockup=newId;
-  loadMockupAssets(newId);
+  loadMockupAssets(newId,false);
   renderLikeGrid();
 }
 function showGallery(){
@@ -855,7 +879,7 @@ sSize.addEventListener('change',pushHistory);
 sX.addEventListener('change',pushHistory);
 sY.addEventListener('change',pushHistory);
 sRot.addEventListener('change',pushHistory);
-document.getElementById('resetBtn').addEventListener('click',()=>{pos={cx:0.5,cy:0.48,size:0.35,rot:0};syncSliders();drawPreview();pushHistory();});
+document.getElementById('resetBtn').addEventListener('click',()=>{Object.assign(pos,mockupDefaultPos);syncSliders();drawPreview();pushHistory();});
 document.getElementById('rotate90Btn').addEventListener('click',()=>{
   if(!designImg)return;
   // Nudges rotation in clean 15° steps, wrapping back into the slider's
