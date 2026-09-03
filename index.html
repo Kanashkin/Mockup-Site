@@ -256,6 +256,17 @@ const BLEND_FNS={
 };
 
 // ── Mockup assets ─────────────────────────────────────────────────────────
+// The live canvas is only CW x CH (920x1380), but source photos/overlays are
+// full print-resolution (e.g. 2000x2999) — fetching those in full just to
+// downscale them client-side wastes ~4-5x the bandwidth and was the cause of
+// a visible "flat white shirt" flash before shading loaded in. Each asset has
+// a pre-shrunk "_preview" sibling (same convention as shirt_mask_preview.png)
+// generated at build time; use those for the interactive canvas and keep the
+// full-res files for the server-side /render (final high-res download) only.
+function previewName(fname){
+  const i=fname.lastIndexOf('.');
+  return fname.slice(0,i)+'_preview'+fname.slice(i);
+}
 function loadMockupAssets(name){
   basePixels=null;maskPixels=null;warpedPixels=null;warpMap=null;overlaysData=null;dispData=null;
   const si=new Image();
@@ -266,7 +277,7 @@ function loadMockupAssets(name){
     basePixels=tg.getImageData(0,0,CW,CH).data.slice();
     drawPreview();
   };
-  si.src='/'+name+'/shirt_base.png?v='+Date.now();
+  si.src='/'+name+'/'+previewName('shirt_base.png')+'?v='+Date.now();
   fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
     const list=pkg.overlays||[];
     if(list.length===0){overlaysData=[];drawPreview();return;}
@@ -281,7 +292,7 @@ function loadMockupAssets(name){
         loaded[idx]={pixels:tg.getImageData(0,0,CW,CH).data,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
         if(--pending===0){overlaysData=loaded;drawPreview();}
       };
-      oi.src='/'+name+'/'+ov.file+'?v='+Date.now();
+      oi.src='/'+name+'/'+previewName(ov.file)+'?v='+Date.now();
     });
 
     // Fabric-texture displacement (Photoshop Displace filter equivalent, mirrors
@@ -304,7 +315,7 @@ function loadMockupAssets(name){
         dispData={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
         drawPreview();
       };
-      di.src='/'+name+'/'+disp.map+'?v='+Date.now();
+      di.src='/'+name+'/'+previewName(disp.map)+'?v='+Date.now();
     }
   });
   const mi=new Image();
