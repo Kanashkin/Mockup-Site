@@ -17,13 +17,19 @@
     h1 span{color:var(--accent)}
     .sub{color:var(--muted);font-size:13px;margin-top:4px;text-align:center}
     .main{display:flex;gap:24px;width:100%;max-width:1060px;align-items:flex-start}
-    .left-col{flex:0 0 auto;width:460px;display:flex;flex-direction:column;gap:12px}
+    .left-col{flex:0 0 auto;display:flex;flex-direction:column;gap:12px}
     #previewCanvas{width:460px;height:690px;border-radius:12px;display:block;cursor:crosshair;background:#222}
     #previewCanvas.has-design{cursor:move}
     .result-col{flex:1;min-width:280px;position:sticky;top:16px}
-    .controls-compact{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
-    .ctrl-section{padding-top:12px;border-top:1px solid var(--border)}
-    .ctrl-section:first-child{padding-top:0;border-top:none}
+    .editor-row{display:flex;gap:16px;align-items:flex-start}
+    .tool-sidebar{width:190px;flex:0 0 190px;display:flex;flex-direction:column;gap:8px;position:relative}
+    .tool-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:border-color .2s,color .2s}
+    .tool-btn:hover,.tool-btn.active{border-color:var(--accent);color:var(--accent)}
+    .tool-btn-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+    .tool-btn-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}
+    .tool-btn-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .flyout{position:absolute;top:0;left:calc(100% + 12px);width:260px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+    .flyout.show{display:block}
     .result-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:50px 12px;line-height:1.6}
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
@@ -45,7 +51,7 @@
     .like-card{border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:border-color .2s,transform .15s}
     .like-card:hover{border-color:var(--accent);transform:translateY(-2px)}
     .like-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
-    .site-logo{position:fixed;top:16px;left:16px;height:34px;width:auto;z-index:50}
+    .site-logo{position:fixed;top:16px;left:16px;height:34px;width:auto;z-index:50;cursor:pointer}
     .auth-bar{position:fixed;top:16px;right:16px;display:flex;align-items:center;gap:10px;font-size:13px;z-index:50}
     .auth-link{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s}
     .auth-link:hover{border-color:var(--accent);color:var(--accent)}
@@ -68,12 +74,6 @@
     .status-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
     .status-pill.active{background:rgba(233,51,35,.14);color:var(--accent)}
     .status-pill.none,.status-pill.cancelled,.status-pill.expired{background:rgba(255,255,255,.06);color:var(--muted)}
-    .drop{border:2px dashed var(--border);border-radius:8px;padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
-    .drop:hover{border-color:var(--accent)}
-    .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
-    .drop-icon{font-size:18px;display:inline-block;margin-right:6px;vertical-align:middle}
-    .drop-text{font-size:12px;color:var(--muted);line-height:1.4;display:inline-block;vertical-align:middle;text-align:left}
-    .drop-text strong{color:var(--accent)}
     .presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
     .preset{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s;flex-shrink:0}
     .preset:hover{transform:scale(1.15)}
@@ -181,39 +181,42 @@
         <button class="icon-btn" id="rotate90Btn" title="Rotate" disabled>⟳</button>
       </div>
     </div>
-    <canvas id="previewCanvas" width="920" height="1380"></canvas>
+    <div class="editor-row">
+      <div class="tool-sidebar">
+        <input type="file" id="fileInput" accept="image/*" style="display:none">
+        <button class="tool-btn" id="toolUploadBtn">
+          <span class="tool-btn-icon" id="uploadIcon">🎨</span>
+          <span class="tool-btn-label" id="uploadLabel">Upload design</span>
+        </button>
+        <button class="tool-btn" id="toolColorBtn">
+          <span class="tool-btn-swatch" id="toolColorSwatch" style="background:#ffffff"></span>
+          <span class="tool-btn-label">Shirt color</span>
+        </button>
+        <button class="tool-btn" id="toolAdjustBtn">
+          <span class="tool-btn-icon">⤢</span>
+          <span class="tool-btn-label">Position &amp; size</span>
+        </button>
+        <button class="btn" id="renderBtn" disabled style="margin-top:4px">Generate High-Res →</button>
 
-    <div class="controls-compact">
-      <div class="ctrl-section">
-        <div class="drop" id="drop">
-          <input type="file" id="fileInput" accept="image/*">
-          <span class="drop-icon" id="dropIcon">🎨</span>
-          <span class="drop-text" id="dropText"><strong>Click to upload</strong> or drag & drop</span>
+        <div class="flyout" id="colorFlyout">
+          <div class="presets" id="presets"></div>
+          <div class="color-row">
+            <label>Custom</label>
+            <input type="color" id="colorPicker" value="#ffffff">
+            <input type="text" id="colorHex" value="#ffffff" maxlength="7">
+          </div>
+        </div>
+        <div class="flyout" id="adjustFlyout">
+          <div class="sliders">
+            <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
+            <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
+            <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="48"><span id="vY">48%</span></div>
+            <div class="row"><label>Rotate</label><input type="range" id="sRot" min="-45" max="45" value="0"><span id="vRot">0°</span></div>
+          </div>
+          <button class="btn2" id="resetBtn">↺ Reset</button>
         </div>
       </div>
-
-      <div class="ctrl-section">
-        <div class="presets" id="presets"></div>
-        <div class="color-row">
-          <label>Custom</label>
-          <input type="color" id="colorPicker" value="#ffffff">
-          <input type="text" id="colorHex" value="#ffffff" maxlength="7">
-        </div>
-      </div>
-
-      <div class="ctrl-section">
-        <div class="sliders">
-          <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
-          <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
-          <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="48"><span id="vY">48%</span></div>
-          <div class="row"><label>Rotate</label><input type="range" id="sRot" min="-45" max="45" value="0"><span id="vRot">0°</span></div>
-        </div>
-        <button class="btn2" id="resetBtn">↺ Reset</button>
-      </div>
-
-      <div class="ctrl-section">
-        <button class="btn" id="renderBtn" disabled>Generate High-Res →</button>
-      </div>
+      <canvas id="previewCanvas" width="920" height="1380"></canvas>
     </div>
   </div>
 
@@ -268,12 +271,14 @@ PRESETS.forEach(p=>{
   el.onclick=()=>setColor(p.hex,el);
   presetsEl.appendChild(el);
 });
+function updateColorSwatch(){document.getElementById('toolColorSwatch').style.background=shirtColor;}
 function setColor(hex,el){
   shirtColor=hex;
   document.getElementById('colorPicker').value=hex;
   document.getElementById('colorHex').value=hex;
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
   if(el)el.classList.add('active');
+  updateColorSwatch();
   drawPreview();
   pushHistory();
 }
@@ -281,25 +286,46 @@ document.getElementById('colorPicker').addEventListener('input',e=>{
   shirtColor=e.target.value;
   document.getElementById('colorHex').value=e.target.value;
   presetsEl.querySelectorAll('.preset').forEach(p=>p.classList.remove('active'));
+  updateColorSwatch();
   drawPreview();
 });
 document.getElementById('colorPicker').addEventListener('change',pushHistory);
 document.getElementById('colorHex').addEventListener('change',e=>{
   let v=e.target.value;
   if(!v.startsWith('#'))v='#'+v;
-  if(/^#[0-9a-fA-F]{6}$/.test(v)){shirtColor=v;document.getElementById('colorPicker').value=v;drawPreview();pushHistory();}
+  if(/^#[0-9a-fA-F]{6}$/.test(v)){shirtColor=v;document.getElementById('colorPicker').value=v;updateColorSwatch();drawPreview();pushHistory();}
 });
 
+// ── Tool sidebar flyouts (color / position, opened one at a time) ─────────
+function closeFlyouts(){
+  document.getElementById('colorFlyout').classList.remove('show');
+  document.getElementById('adjustFlyout').classList.remove('show');
+  document.getElementById('toolColorBtn').classList.remove('active');
+  document.getElementById('toolAdjustBtn').classList.remove('active');
+}
+function toggleFlyout(flyoutId,btnId){
+  const fly=document.getElementById(flyoutId),btn=document.getElementById(btnId);
+  const opening=!fly.classList.contains('show');
+  closeFlyouts();
+  if(opening){fly.classList.add('show');btn.classList.add('active');}
+}
+document.getElementById('toolColorBtn').addEventListener('click',e=>{e.stopPropagation();toggleFlyout('colorFlyout','toolColorBtn');});
+document.getElementById('toolAdjustBtn').addEventListener('click',e=>{e.stopPropagation();toggleFlyout('adjustFlyout','toolAdjustBtn');});
+document.addEventListener('click',e=>{if(!e.target.closest('.tool-sidebar'))closeFlyouts();});
+
 // ── Upload ────────────────────────────────────────────────────────────────
-const drop=document.getElementById('drop');
-drop.addEventListener('dragover',e=>{e.preventDefault();drop.style.borderColor='var(--accent)';});
-drop.addEventListener('dragleave',()=>drop.style.borderColor='');
-drop.addEventListener('drop',e=>{
-  e.preventDefault();drop.style.borderColor='';
-  if(e.dataTransfer.files[0])loadDesign(e.dataTransfer.files[0]);
+document.getElementById('toolUploadBtn').addEventListener('click',()=>{
+  closeFlyouts();
+  document.getElementById('fileInput').click();
 });
 document.getElementById('fileInput').addEventListener('change',e=>{
   if(e.target.files[0])loadDesign(e.target.files[0]);
+});
+// Dropping an image directly onto the preview also loads it as the design.
+canvas.addEventListener('dragover',e=>e.preventDefault());
+canvas.addEventListener('drop',e=>{
+  e.preventDefault();
+  if(e.dataTransfer.files[0])loadDesign(e.dataTransfer.files[0]);
 });
 function loadDesign(f){
   file=f;
@@ -308,8 +334,8 @@ function loadDesign(f){
     designImg=img;
     canvas.classList.add('has-design');
     document.getElementById('renderBtn').disabled=false;
-    document.getElementById('dropIcon').textContent='✓';
-    document.getElementById('dropText').innerHTML='<strong>'+f.name+'</strong><br>'+Math.round(f.size/1024)+'KB — click to change';
+    document.getElementById('uploadIcon').textContent='✓';
+    document.getElementById('uploadLabel').textContent=f.name.length>16?f.name.slice(0,13)+'…':f.name;
     drawPreview();
     updateHistoryButtons();
   };
@@ -458,6 +484,7 @@ function openEditor(name){
   loadMockupAssets(name);
   renderLikeGrid();
   resetHistory();
+  closeFlyouts();
 }
 function renderLikeGrid(){
   const grid=document.getElementById('likeGrid');
@@ -485,6 +512,7 @@ function showGallery(){
   document.getElementById('subText').textContent='';
 }
 document.getElementById('backBtn').addEventListener('click',showGallery);
+document.querySelector('.site-logo').addEventListener('click',showGallery);
 
 // ── Auth + Cabinet ───────────────────────────────────────────────────────
 let currentUser=null; // last /api/me response
@@ -840,6 +868,7 @@ function applySnapshot(snap){
   presetsEl.querySelectorAll('.preset').forEach((p,i)=>{
     p.classList.toggle('active',PRESETS[i].hex===shirtColor);
   });
+  updateColorSwatch();
   syncSliders();
   drawPreview();
 }
