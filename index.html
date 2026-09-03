@@ -27,6 +27,26 @@
     .gallery-card .label{padding:12px;font-size:14px;font-weight:600;text-align:center}
     .back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s}
     .back-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .auth-bar{position:fixed;top:16px;right:16px;display:flex;align-items:center;gap:10px;font-size:13px;z-index:50}
+    .auth-link{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .2s,color .2s}
+    .auth-link:hover{border-color:var(--accent);color:var(--accent)}
+    .auth-link.accent{border-color:var(--accent);color:var(--accent)}
+    #userEmail{color:var(--muted);font-size:12px;margin-right:2px}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+    .modal-overlay.show{display:flex}
+    .modal-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:320px;max-width:90vw}
+    .modal-card h2{font-size:18px;margin-bottom:16px}
+    .modal-card input{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;margin-bottom:10px}
+    .modal-card .switch{font-size:12px;color:var(--muted);text-align:center;margin-top:12px;cursor:pointer}
+    .modal-card .switch:hover{color:var(--accent)}
+    .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer}
+    .modal-card{position:relative}
+    .cabinet{width:100%;max-width:420px}
+    .plan-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+    .plan-row:last-child{border-bottom:none}
+    .status-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
+    .status-pill.active{background:rgba(232,255,71,.12);color:var(--accent)}
+    .status-pill.none,.status-pill.cancelled,.status-pill.expired{background:rgba(255,255,255,.06);color:var(--muted)}
     .drop{border:2px dashed var(--border);border-radius:8px;padding:24px 12px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
     .drop:hover{border-color:var(--accent)}
     .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -63,11 +83,45 @@
   </style>
 </head>
 <body>
+<div class="auth-bar" id="authBar">
+  <span id="authGuest">
+    <button class="auth-link" id="loginLink">Log in</button>
+    <button class="auth-link accent" id="signupLink">Sign up</button>
+  </span>
+  <span id="authUser" style="display:none">
+    <span id="userEmail"></span>
+    <button class="auth-link" id="cabinetLink">Cabinet</button>
+    <button class="auth-link" id="logoutLink">Log out</button>
+  </span>
+</div>
+
+<div class="modal-overlay" id="authModal">
+  <div class="modal-card">
+    <button class="modal-close" id="authModalClose">✕</button>
+    <h2 id="authModalTitle">Log in</h2>
+    <form id="authForm">
+      <input type="email" id="authEmail" placeholder="Email" required autocomplete="email">
+      <input type="password" id="authPassword" placeholder="Password" required autocomplete="current-password" minlength="8">
+      <button type="submit" class="btn" id="authSubmit">Log in</button>
+    </form>
+    <div class="status err" id="authError"></div>
+    <div class="switch" id="authSwitch">Don't have an account? Sign up</div>
+  </div>
+</div>
+
 <h1>T-Shirt <span>Mockup</span></h1>
 <p class="sub" id="subText">Choose a mockup to start designing</p>
 
 <div class="gallery" id="galleryView">
   <div class="gallery-grid" id="galleryGrid"></div>
+</div>
+
+<div class="cabinet" id="cabinetView" style="display:none">
+  <button class="back-btn" id="cabinetBackBtn">← Back to designs</button>
+  <div class="card">
+    <div class="card-title">My Subscription</div>
+    <div class="card-body" id="cabinetBody">Loading…</div>
+  </div>
 </div>
 
 <div class="main" id="editorView" style="display:none">
@@ -320,19 +374,155 @@ MOCKUPS.forEach(m=>{
   card.addEventListener('click',()=>openEditor(m.id));
   galleryGrid.appendChild(card);
 });
-function openEditor(name){
-  currentMockup=name;
+function hideAllViews(){
   document.getElementById('galleryView').style.display='none';
+  document.getElementById('editorView').style.display='none';
+  document.getElementById('cabinetView').style.display='none';
+}
+function openEditor(name){
+  hideAllViews();
+  currentMockup=name;
   document.getElementById('editorView').style.display='flex';
   document.getElementById('subText').textContent='Upload your design — position it and pick a color';
   loadMockupAssets(name);
 }
 function showGallery(){
-  document.getElementById('editorView').style.display='none';
+  hideAllViews();
   document.getElementById('galleryView').style.display='block';
   document.getElementById('subText').textContent='Choose a mockup to start designing';
 }
 document.getElementById('backBtn').addEventListener('click',showGallery);
+
+// ── Auth + Cabinet ───────────────────────────────────────────────────────
+let currentUser=null; // last /api/me response
+let authMode='login';
+
+async function refreshAuthUI(){
+  const res=await fetch('/api/me');
+  currentUser=await res.json();
+  const guest=document.getElementById('authGuest'),userEl=document.getElementById('authUser');
+  if(currentUser.logged_in){
+    guest.style.display='none';userEl.style.display='inline-flex';
+    document.getElementById('userEmail').textContent=currentUser.email;
+  }else{
+    guest.style.display='inline-flex';userEl.style.display='none';
+  }
+  return currentUser;
+}
+function openAuthModal(mode){
+  authMode=mode;
+  document.getElementById('authModalTitle').textContent=mode==='login'?'Log in':'Sign up';
+  document.getElementById('authSubmit').textContent=mode==='login'?'Log in':'Sign up';
+  document.getElementById('authSwitch').textContent=mode==='login'?"Don't have an account? Sign up":'Already have an account? Log in';
+  document.getElementById('authError').textContent='';
+  document.getElementById('authModal').classList.add('show');
+}
+function closeAuthModal(){document.getElementById('authModal').classList.remove('show');}
+document.getElementById('loginLink').addEventListener('click',()=>openAuthModal('login'));
+document.getElementById('signupLink').addEventListener('click',()=>openAuthModal('signup'));
+document.getElementById('authModalClose').addEventListener('click',closeAuthModal);
+document.getElementById('authModal').addEventListener('click',e=>{if(e.target.id==='authModal')closeAuthModal();});
+document.getElementById('authSwitch').addEventListener('click',()=>openAuthModal(authMode==='login'?'signup':'login'));
+document.getElementById('authForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const email=document.getElementById('authEmail').value;
+  const password=document.getElementById('authPassword').value;
+  const errEl=document.getElementById('authError');
+  errEl.textContent='';
+  const form=new FormData();form.append('email',email);form.append('password',password);
+  const endpoint=authMode==='login'?'/api/login':'/api/register';
+  try{
+    const res=await fetch(endpoint,{method:'POST',body:form});
+    const data=await res.json();
+    if(!res.ok){errEl.textContent=data.detail||'Something went wrong';return;}
+    closeAuthModal();
+    document.getElementById('authForm').reset();
+    await refreshAuthUI();
+  }catch(err){errEl.textContent='Network error';}
+});
+document.getElementById('logoutLink').addEventListener('click',async()=>{
+  await fetch('/api/logout',{method:'POST'});
+  await refreshAuthUI();
+  showGallery();
+});
+document.getElementById('cabinetLink').addEventListener('click',openCabinet);
+document.getElementById('cabinetBackBtn').addEventListener('click',showGallery);
+
+async function openCabinet(){
+  hideAllViews();
+  document.getElementById('cabinetView').style.display='block';
+  document.getElementById('subText').textContent='Manage your account and subscription';
+  await refreshAuthUI();
+  renderCabinet();
+}
+function renderCabinet(){
+  const body=document.getElementById('cabinetBody');
+  if(!currentUser.logged_in){
+    body.innerHTML='<p class="hint">Log in to manage your subscription.</p>';
+    return;
+  }
+  const sub=currentUser.subscription;
+  const pillClass='status-pill '+sub.status;
+  const until=sub.current_period_end?new Date(sub.current_period_end).toLocaleDateString():null;
+  let html='<div class="plan-row"><span>Account</span><span>'+currentUser.email+'</span></div>';
+  html+='<div class="plan-row"><span>Plan status</span><span class="'+pillClass+'">'+sub.status+'</span></div>';
+  if(sub.status==='active'){
+    if(until)html+='<div class="plan-row"><span>Renews</span><span>'+until+'</span></div>';
+    html+='<button class="btn2" id="cancelSubBtn" style="margin-top:14px">Cancel subscription</button>';
+  }else{
+    html+='<p class="hint" style="margin:12px 0">Subscribe to unlock high-res downloads for all mockups.</p>';
+    html+='<button class="btn" id="subscribeBtn">Subscribe — $9.99/mo →</button>';
+  }
+  html+='<div class="status" id="cabinetStatus"></div>';
+  body.innerHTML=html;
+  const subBtn=document.getElementById('subscribeBtn');
+  if(subBtn)subBtn.addEventListener('click',startSubscription);
+  const cancelBtn=document.getElementById('cancelSubBtn');
+  if(cancelBtn)cancelBtn.addEventListener('click',cancelSubscription);
+}
+async function startSubscription(){
+  const st=document.getElementById('cabinetStatus');
+  st.className='status';st.innerHTML='<span class="spin"></span>Redirecting to PayPal…';
+  try{
+    const res=await fetch('/api/subscription/create',{method:'POST'});
+    const data=await res.json();
+    if(!res.ok){st.className='status err';st.textContent=data.detail||'Could not start checkout';return;}
+    window.location.href=data.approve_url;
+  }catch(err){st.className='status err';st.textContent='Network error';}
+}
+async function cancelSubscription(){
+  if(!confirm('Cancel your subscription?'))return;
+  const st=document.getElementById('cabinetStatus');
+  st.className='status';st.textContent='Cancelling…';
+  try{
+    const res=await fetch('/api/subscription/cancel',{method:'POST'});
+    const data=await res.json();
+    if(!res.ok){st.className='status err';st.textContent=data.detail||'Could not cancel';return;}
+    await refreshAuthUI();renderCabinet();
+  }catch(err){st.className='status err';st.textContent='Network error';}
+}
+
+// Handle the redirect back from PayPal (?subscribe=success|cancelled|pending|error)
+(function handleSubscribeReturn(){
+  const params=new URLSearchParams(window.location.search);
+  const result=params.get('subscribe');
+  if(!result)return;
+  history.replaceState(null,'',window.location.pathname);
+  refreshAuthUI().then(()=>{
+    openCabinet();
+    const st=document.getElementById('cabinetStatus');
+    if(!st)return;
+    const messages={
+      success:['status ok','✓ Subscription active — enjoy!'],
+      pending:['status','Subscription is processing — check back shortly.'],
+      cancelled:['status','Checkout cancelled.'],
+      error:['status err','Something went wrong finding your subscription.'],
+    };
+    const [cls,msg]=messages[result]||['status',''];
+    st.className=cls;st.textContent=msg;
+  });
+})();
+refreshAuthUI();
 
 // ── Warp lookup ───────────────────────────────────────────────────────────
 function buildWarpLookup(){
@@ -469,6 +659,9 @@ canvas.addEventListener('wheel',e=>{if(!designImg)return;pos.size=Math.max(0.05,
 // ── Generate ──────────────────────────────────────────────────────────────
 document.getElementById('renderBtn').addEventListener('click',async()=>{
   if(!file)return;
+  await refreshAuthUI();
+  if(!currentUser.logged_in){openAuthModal('login');return;}
+  if(currentUser.subscription.status!=='active'){openCabinet();return;}
   const half=pos.size/2;
   const sx=Math.round((pos.cx-half)*SRC_W),sy=Math.round((pos.cy-half)*SRC_H);
   const sw=Math.round(pos.size*SRC_W),sh=Math.round(pos.size*SRC_H);
@@ -483,6 +676,8 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   form.append('mockup',currentMockup);
   try{
     const res=await fetch('/render',{method:'POST',body:form});
+    if(res.status===401){openAuthModal('login');st.className='';st.textContent='';return;}
+    if(res.status===402){openCabinet();st.className='';st.textContent='';return;}
     if(!res.ok)throw new Error('Error '+res.status);
     const url=URL.createObjectURL(await res.blob());
     document.getElementById('resultImg').src=url;document.getElementById('resultImg').classList.add('show');

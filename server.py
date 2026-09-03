@@ -1,18 +1,32 @@
-import io, os, json
+import io, os, json, datetime
 import numpy as np
 import cv2
 from PIL import Image
 from scipy.interpolate import griddata
 from scipy.ndimage import map_coordinates
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import Response
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Depends
+from fastapi.responses import Response, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy.orm import Session
+
+import paypal
+from db import init_db, get_db, User, Subscription
+from auth import (
+    hash_password, verify_password, validate_email, validate_password,
+    create_user_session, clear_user_session, get_current_user, require_user,
+)
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# SECRET_KEY signs the session cookie — set a real random value on Railway.
+# The fallback below is only so the app still boots (with sessions reset
+# every deploy) if someone forgets to set it; never rely on it in production.
+app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "dev-insecure-secret-key"))
 
 BASE_DIR = os.path.dirname(__file__)
+init_db()
 
 def soft_light(b,bl): return np.clip(np.where(bl<=0.5,b-(1-2*bl)*b*(1-b),b+(2*bl-1)*(np.where(b<=0.25,((16*b-12)*b+4)*b,np.sqrt(np.maximum(b,0)))-b)),0,1)
 def blend_multiply(b,bl): return b*bl
@@ -205,14 +219,147 @@ for name in ["mockup_package","mockup2_package","mockup3_package","mockup4_packa
     if os.path.exists(os.path.join(d, "mockup.json")):
         ENGINES[name] = MockupEngine(d)
 
+
+# ── Auth ─────────────────────────────────────────────────────────────────
+@app.post("/api/register")
+def register(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    email = validate_email(email)
+    validate_password(password)
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(400, "An account with this email already exists")
+    user = User(email=email, password_hash=hash_password(password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    create_user_session(request, user.id)
+    return {"email": user.email}
+
+
+@app.post("/api/login")
+def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    email = validate_email(email)
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.password_hash):
+        raise HTTPException(401, "Invalid email or password")
+    create_user_session(request, user.id)
+    return {"email": user.email}
+
+
+@app.post("/api/logout")
+def logout(request: Request):
+    clear_user_session(request)
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def me(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user(request, db)
+    if not user:
+        return {"logged_in": False}
+    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    return {
+        "logged_in": True,
+        "email": user.email,
+        "subscription": {
+            "status": sub.status if sub else "none",
+            "current_period_end": sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
+        },
+    }
+
+
+# ── Subscription / PayPal ───────────────────────────────────────────────
+@app.post("/api/subscription/create")
+def create_subscription(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    plan_id = os.environ.get("PAYPAL_PLAN_ID")
+    if not paypal.configured() or not plan_id:
+        raise HTTPException(503, "Payments are not configured yet")
+    base = str(request.base_url).rstrip("/")
+    result = paypal.create_subscription(
+        plan_id=plan_id,
+        return_url=f"{base}/api/subscription/return",
+        cancel_url=f"{base}/?subscribe=cancelled",
+        custom_id=str(user.id),
+    )
+    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    if not sub:
+        sub = Subscription(user_id=user.id)
+        db.add(sub)
+    sub.status = "pending"
+    sub.paypal_subscription_id = result["id"]
+    sub.plan_id = plan_id
+    db.commit()
+    return {"approve_url": result["approve_url"]}
+
+
+@app.get("/api/subscription/return")
+def subscription_return(subscription_id: str, db: Session = Depends(get_db)):
+    """PayPal redirects the browser here after the user approves the
+    subscription on PayPal's site. We double-check the status directly with
+    PayPal's API (never trust query params alone) before marking it active."""
+    sub = db.query(Subscription).filter(Subscription.paypal_subscription_id == subscription_id).first()
+    if not sub:
+        return RedirectResponse("/?subscribe=error")
+    info = paypal.get_subscription(subscription_id)
+    if info.get("status") == "ACTIVE":
+        sub.status = "active"
+        next_billing = info.get("billing_info", {}).get("next_billing_time")
+        if next_billing:
+            sub.current_period_end = datetime.datetime.fromisoformat(next_billing.replace("Z", "+00:00"))
+        db.commit()
+        return RedirectResponse("/?subscribe=success")
+    return RedirectResponse("/?subscribe=pending")
+
+
+@app.post("/api/subscription/cancel")
+def cancel_subscription_endpoint(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    if not sub or not sub.paypal_subscription_id:
+        raise HTTPException(400, "No active subscription")
+    paypal.cancel_subscription(sub.paypal_subscription_id)
+    sub.status = "cancelled"
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/api/paypal/webhook")
+async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
+    body = await request.body()
+    if not paypal.verify_webhook_signature(dict(request.headers), body):
+        raise HTTPException(400, "Invalid webhook signature")
+    event = json.loads(body)
+    event_type = event.get("event_type", "")
+    resource = event.get("resource", {})
+    paypal_sub_id = resource.get("id")
+    if not paypal_sub_id:
+        return {"ok": True}
+    sub = db.query(Subscription).filter(Subscription.paypal_subscription_id == paypal_sub_id).first()
+    if not sub:
+        return {"ok": True}
+    if event_type == "BILLING.SUBSCRIPTION.ACTIVATED":
+        sub.status = "active"
+    elif event_type in ("BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.SUSPENDED"):
+        sub.status = "cancelled"
+    elif event_type == "BILLING.SUBSCRIPTION.EXPIRED":
+        sub.status = "expired"
+    elif event_type == "PAYMENT.SALE.COMPLETED":
+        sub.status = "active"
+    db.commit()
+    return {"ok": True}
+
+
 @app.post("/render")
 async def render_mockup(
     file: UploadFile = File(...),
     x: int = Form(0), y: int = Form(0),
     w: int = Form(None), h: int = Form(None),
     color: str = Form("#ffffff"),
-    mockup: str = Form("mockup_package")
+    mockup: str = Form("mockup_package"),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
 ):
+    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    if not sub or not sub.is_active():
+        raise HTTPException(402, "Active subscription required to generate high-res downloads")
     engine = ENGINES.get(mockup) or list(ENGINES.values())[0]
     if not file.content_type.startswith("image/"):
         raise HTTPException(400,"File must be an image")
