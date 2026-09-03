@@ -138,7 +138,7 @@ class MockupEngine:
 
 # Load engines
 ENGINES = {}
-for name in ["mockup_package","mockup2_package"]:
+for name in ["mockup_package","mockup2_package","mockup3_package"]:
     d = os.path.join(BASE_DIR, name)
     if os.path.exists(os.path.join(d, "mockup.json")):
         ENGINES[name] = MockupEngine(d)
