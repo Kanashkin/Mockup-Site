@@ -370,22 +370,67 @@ function previewName(fname){
   const i=fname.lastIndexOf('.');
   return fname.slice(0,i)+'_preview'+fname.slice(i);
 }
+// Bumped on every call so a slow, superseded load (e.g. clicking through
+// several "You might like" photos quickly) can detect it's stale and drop
+// its results instead of overwriting a newer one.
+let mockupLoadSeq=0;
 function loadMockupAssets(name){
-  basePixels=null;maskPixels=null;warpedPixels=null;warpMap=null;overlaysData=null;dispData=null;
+  const reqId=++mockupLoadSeq;
+  // Load everything for the new mockup into local variables and only swap
+  // them into the live state once ALL of it is ready — keeping the
+  // previous mockup fully rendered (with its shading/overlays) on screen
+  // in the meantime, instead of nulling state up front and redrawing a
+  // flat, un-shaded shirt while the new assets are still loading in.
+  let newBase=null,newMask=null,newWarped=null,newWarpMap=null,newOverlays=[],newDisp=null,newSrcW=0,newSrcH=0;
+  let pending=4; // base image, mask image, warp_data.json, mockup.json (overlays+displace resolve as one unit)
+  function finish(){
+    if(--pending>0)return;
+    if(reqId!==mockupLoadSeq)return; // a newer loadMockupAssets call has since superseded this one
+    basePixels=newBase;maskPixels=newMask;warpedPixels=newWarped;warpMap=newWarpMap;
+    overlaysData=newOverlays;dispData=newDisp;SRC_W=newSrcW;SRC_H=newSrcH;
+    drawPreview();
+  }
+
   const si=new Image();
   si.crossOrigin='anonymous';
   si.onload=()=>{
     const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
     const tg=tmp.getContext('2d');tg.drawImage(si,0,0,CW,CH);
-    basePixels=tg.getImageData(0,0,CW,CH).data.slice();
-    drawPreview();
+    newBase=tg.getImageData(0,0,CW,CH).data.slice();
+    finish();
   };
   si.src='/'+name+'/'+previewName('shirt_base.png')+'?v='+Date.now();
+
+  const mi=new Image();
+  mi.crossOrigin='anonymous';
+  mi.onload=()=>{
+    const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
+    const tg=tmp.getContext('2d');tg.drawImage(mi,0,0,CW,CH);
+    const raw=tg.getImageData(0,0,CW,CH).data;
+    const mask=new Float32Array(CW*CH);
+    for(let i=0;i<CW*CH;i++)mask[i]=raw[i*4]/255;
+    newMask=mask;
+    finish();
+  };
+  mi.src='/'+name+'/shirt_mask_preview.png?v='+Date.now();
+
+  fetch('/'+name+'/warp_data.json?v='+Date.now()).then(r=>r.json()).then(d=>{
+    newWarpMap=d;newSrcW=d.src_w;newSrcH=d.src_h;
+    newWarped=computeWarpLookup(d);
+    finish();
+  });
+
   fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
     const list=pkg.overlays||[];
-    if(list.length===0){overlaysData=[];drawPreview();return;}
+    const disp=pkg.displace;
+    let subPending=list.length+(disp?1:0);
     const loaded=new Array(list.length);
-    let pending=list.length;
+    function subDone(){
+      if(--subPending>0)return;
+      newOverlays=loaded;
+      finish();
+    }
+    if(subPending===0){newOverlays=[];finish();return;}
     list.forEach((ov,idx)=>{
       const oi=new Image();
       oi.crossOrigin='anonymous';
@@ -393,7 +438,7 @@ function loadMockupAssets(name){
         const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
         const tg=tmp.getContext('2d');tg.drawImage(oi,0,0,CW,CH);
         loaded[idx]={pixels:tg.getImageData(0,0,CW,CH).data,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
-        if(--pending===0){overlaysData=loaded;drawPreview();}
+        subDone();
       };
       oi.src='/'+name+'/'+previewName(ov.file)+'?v='+Date.now();
     });
@@ -401,7 +446,6 @@ function loadMockupAssets(name){
     // Fabric-texture displacement (Photoshop Displace filter equivalent, mirrors
     // server.py's _apply_displace). Scales are defined in full-res canvas units,
     // so they're scaled down by CW/canvas.width for this preview's resolution.
-    const disp=pkg.displace;
     if(disp){
       const ratio=CW/pkg.canvas.width;
       const di=new Image();
@@ -415,26 +459,11 @@ function loadMockupAssets(name){
           const s=i*4;
           gray[i]=(0.299*raw[s]+0.587*raw[s+1]+0.114*raw[s+2])/255;
         }
-        dispData={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
-        drawPreview();
+        newDisp={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
+        subDone();
       };
       di.src='/'+name+'/'+previewName(disp.map)+'?v='+Date.now();
     }
-  });
-  const mi=new Image();
-  mi.crossOrigin='anonymous';
-  mi.onload=()=>{
-    const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
-    const tg=tmp.getContext('2d');tg.drawImage(mi,0,0,CW,CH);
-    const raw=tg.getImageData(0,0,CW,CH).data;
-    maskPixels=new Float32Array(CW*CH);
-    for(let i=0;i<CW*CH;i++)maskPixels[i]=raw[i*4]/255;
-    drawPreview();
-  };
-  mi.src='/'+name+'/shirt_mask_preview.png?v='+Date.now();
-  fetch('/'+name+'/warp_data.json?v='+Date.now()).then(r=>r.json()).then(d=>{
-    warpMap=d;SRC_W=d.src_w;SRC_H=d.src_h;
-    buildWarpLookup();drawPreview();
   });
 }
 // ── Gallery (home screen) → Editor navigation ───────────────────────────────
@@ -675,11 +704,14 @@ async function cancelSubscription(){
 refreshAuthUI();
 
 // ── Warp lookup ───────────────────────────────────────────────────────────
-function buildWarpLookup(){
-  if(!warpMap)return;
-  const mw=warpMap.map_w,mh=warpMap.map_h;
-  const mx=warpMap.map_x,my=warpMap.map_y;
-  warpedPixels=new Float32Array(CW*CH*2);
+// Pure function (no global reads/writes) so a mockup switch can compute the
+// new mockup's lookup table into a local variable — kept off-screen until
+// everything else for that mockup is ready too — instead of mutating the
+// live warpedPixels mid-load.
+function computeWarpLookup(map){
+  const mw=map.map_w,mh=map.map_h;
+  const mx=map.map_x,my=map.map_y;
+  const out=new Float32Array(CW*CH*2);
   for(let py=0;py<CH;py++){
     for(let px=0;px<CW;px++){
       const mxf=px/CW*mw,myf=py/CH*mh;
@@ -687,13 +719,14 @@ function buildWarpLookup(){
       const mx1=Math.min(mx0+1,mw-1),my1=Math.min(my0+1,mh-1);
       const fx=mxf-mx0,fy=myf-my0;
       const i00=my0*mw+mx0,i10=my0*mw+mx1,i01=my1*mw+mx0,i11=my1*mw+mx1;
-      if(mx[i00]<0){warpedPixels[(py*CW+px)*2]=-1;continue;}
+      if(mx[i00]<0){out[(py*CW+px)*2]=-1;continue;}
       const x00=mx[i00],x10=mx[i10]>=0?mx[i10]:x00,x01=mx[i01]>=0?mx[i01]:x00,x11=mx[i11]>=0?mx[i11]:x00;
       const y00=my[i00],y10=my[i10]>=0?my[i10]:y00,y01=my[i01]>=0?my[i01]:y00,y11=my[i11]>=0?my[i11]:y00;
-      warpedPixels[(py*CW+px)*2]  =x00*(1-fx)*(1-fy)+x10*fx*(1-fy)+x01*(1-fx)*fy+x11*fx*fy;
-      warpedPixels[(py*CW+px)*2+1]=y00*(1-fx)*(1-fy)+y10*fx*(1-fy)+y01*(1-fx)*fy+y11*fx*fy;
+      out[(py*CW+px)*2]  =x00*(1-fx)*(1-fy)+x10*fx*(1-fy)+x01*(1-fx)*fy+x11*fx*fy;
+      out[(py*CW+px)*2+1]=y00*(1-fx)*(1-fy)+y10*fx*(1-fy)+y01*(1-fx)*fy+y11*fx*fy;
     }
   }
+  return out;
 }
 
 // ── Draw ──────────────────────────────────────────────────────────────────
