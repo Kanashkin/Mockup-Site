@@ -231,7 +231,7 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card" id="likeCard" style="margin-top:16px">
       <div class="card-title">You might like</div>
       <div class="card-body">
         <div class="like-grid" id="likeGrid"></div>
@@ -438,20 +438,22 @@ function loadMockupAssets(name){
   });
 }
 // ── Gallery (home screen) → Editor navigation ───────────────────────────────
+// `model` groups mockups shot with the same person, so "You might like" can
+// show other poses of that same model rather than a random mix of everyone.
 const MOCKUPS=[
-  {id:'mockup_package',  label:'Mockup 1'},
-  {id:'mockup2_package', label:'Mockup 2'},
-  {id:'mockup3_package', label:'Mockup 3'},
-  {id:'mockup4_package', label:'Mockup 4'},
-  {id:'mockup5_package', label:'Mockup 5'},
-  {id:'mockup6_package', label:'Mockup 6'},
-  {id:'mockup7_package', label:'Mockup 7'},
-  {id:'mockup8_package', label:'Mockup 8'},
-  {id:'mockup9_package', label:'Mockup 9'},
-  {id:'mockup10_package',label:'Mockup 10'},
-  {id:'mockup11_package',label:'Mockup 11'},
-  {id:'mockup12_package',label:'Mockup 12'},
-  {id:'mockup13_package',label:'Mockup 13'},
+  {id:'mockup_package',  label:'Mockup 1', model:'woman1'},
+  {id:'mockup2_package', label:'Mockup 2', model:'woman2'},
+  {id:'mockup3_package', label:'Mockup 3', model:'man1'},
+  {id:'mockup4_package', label:'Mockup 4', model:'man1'},
+  {id:'mockup5_package', label:'Mockup 5', model:'man1'},
+  {id:'mockup6_package', label:'Mockup 6', model:'man1'},
+  {id:'mockup7_package', label:'Mockup 7', model:'man1'},
+  {id:'mockup8_package', label:'Mockup 8', model:'man1'},
+  {id:'mockup9_package', label:'Mockup 9', model:'man1'},
+  {id:'mockup10_package',label:'Mockup 10',model:'man1'},
+  {id:'mockup11_package',label:'Mockup 11',model:'man1'},
+  {id:'mockup12_package',label:'Mockup 12',model:'man1'},
+  {id:'mockup13_package',label:'Mockup 13',model:'man1'},
 ];
 const galleryGrid=document.getElementById('galleryGrid');
 MOCKUPS.forEach(m=>{
@@ -488,8 +490,15 @@ function openEditor(name){
 }
 function renderLikeGrid(){
   const grid=document.getElementById('likeGrid');
+  const card=document.getElementById('likeCard');
   grid.innerHTML='';
-  MOCKUPS.filter(m=>m.id!==currentMockup).forEach(m=>{
+  const current=MOCKUPS.find(m=>m.id===currentMockup);
+  const others=MOCKUPS.filter(m=>m.id!==currentMockup&&m.model===current?.model);
+  // Only the same model's other poses belong here — if this one has none
+  // (a solo photo), there's nothing honest to suggest, so hide the section
+  // instead of padding it with a different person.
+  card.style.display=others.length?'':'none';
+  others.forEach(m=>{
     const c=document.createElement('div');
     c.className='like-card';
     c.innerHTML='<img src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
