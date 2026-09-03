@@ -19,11 +19,14 @@
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
     .card-title{padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
     .card-body{padding:16px}
-    .mockup-selector{display:flex;flex-wrap:wrap;gap:10px}
-    .mockup-btn{flex:1 1 100px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center}
-    .mockup-btn:hover{border-color:var(--accent)}
-    .mockup-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(232,255,71,0.06)}
-    .mockup-btn img{width:100%;height:70px;object-fit:cover;object-position:top;border-radius:4px;margin-bottom:6px;display:block}
+    .gallery{width:100%;max-width:1060px}
+    .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px}
+    .gallery-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s}
+    .gallery-card:hover{border-color:var(--accent);transform:translateY(-3px)}
+    .gallery-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
+    .gallery-card .label{padding:12px;font-size:14px;font-weight:600;text-align:center}
+    .back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s}
+    .back-btn:hover{border-color:var(--accent);color:var(--accent)}
     .drop{border:2px dashed var(--border);border-radius:8px;padding:24px 12px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative}
     .drop:hover{border-color:var(--accent)}
     .drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
@@ -61,59 +64,18 @@
 </head>
 <body>
 <h1>T-Shirt <span>Mockup</span></h1>
-<p class="sub">Upload your design — position it and pick a color</p>
-<div class="main">
+<p class="sub" id="subText">Choose a mockup to start designing</p>
+
+<div class="gallery" id="galleryView">
+  <div class="gallery-grid" id="galleryGrid"></div>
+</div>
+
+<div class="main" id="editorView" style="display:none">
   <div class="preview-wrap">
+    <button class="back-btn" id="backBtn">← Back to designs</button>
     <canvas id="previewCanvas" width="920" height="1380"></canvas>
   </div>
   <div class="sidebar">
-
-    <div class="card">
-      <div class="card-title">Choose Mockup</div>
-      <div class="card-body">
-        <div class="mockup-selector">
-          <div class="mockup-btn active" id="mock1" onclick="selectMockup('mockup_package','mock1')">
-            <img src="/mockup_package/shirt_preview.png" alt="">Mockup 1
-          </div>
-          <div class="mockup-btn" id="mock2" onclick="selectMockup('mockup2_package','mock2')">
-            <img src="/mockup2_package/shirt_preview.png" alt="">Mockup 2
-          </div>
-          <div class="mockup-btn" id="mock3" onclick="selectMockup('mockup3_package','mock3')">
-            <img src="/mockup3_package/shirt_preview.png" alt="">Mockup 3
-          </div>
-          <div class="mockup-btn" id="mock4" onclick="selectMockup('mockup4_package','mock4')">
-            <img src="/mockup4_package/shirt_preview.png" alt="">Mockup 4
-          </div>
-          <div class="mockup-btn" id="mock5" onclick="selectMockup('mockup5_package','mock5')">
-            <img src="/mockup5_package/shirt_preview.png" alt="">Mockup 5
-          </div>
-          <div class="mockup-btn" id="mock6" onclick="selectMockup('mockup6_package','mock6')">
-            <img src="/mockup6_package/shirt_preview.png" alt="">Mockup 6
-          </div>
-          <div class="mockup-btn" id="mock7" onclick="selectMockup('mockup7_package','mock7')">
-            <img src="/mockup7_package/shirt_preview.png" alt="">Mockup 7
-          </div>
-          <div class="mockup-btn" id="mock8" onclick="selectMockup('mockup8_package','mock8')">
-            <img src="/mockup8_package/shirt_preview.png" alt="">Mockup 8
-          </div>
-          <div class="mockup-btn" id="mock9" onclick="selectMockup('mockup9_package','mock9')">
-            <img src="/mockup9_package/shirt_preview.png" alt="">Mockup 9
-          </div>
-          <div class="mockup-btn" id="mock10" onclick="selectMockup('mockup10_package','mock10')">
-            <img src="/mockup10_package/shirt_preview.png" alt="">Mockup 10
-          </div>
-          <div class="mockup-btn" id="mock11" onclick="selectMockup('mockup11_package','mock11')">
-            <img src="/mockup11_package/shirt_preview.png" alt="">Mockup 11
-          </div>
-          <div class="mockup-btn" id="mock12" onclick="selectMockup('mockup12_package','mock12')">
-            <img src="/mockup12_package/shirt_preview.png" alt="">Mockup 12
-          </div>
-          <div class="mockup-btn" id="mock13" onclick="selectMockup('mockup13_package','mock13')">
-            <img src="/mockup13_package/shirt_preview.png" alt="">Mockup 13
-          </div>
-        </div>
-      </div>
-    </div>
 
     <div class="card">
       <div class="card-title">Upload Design</div>
@@ -334,13 +296,43 @@ function loadMockupAssets(name){
     buildWarpLookup();drawPreview();
   });
 }
-function selectMockup(name,btnId){
+// ── Gallery (home screen) → Editor navigation ───────────────────────────────
+const MOCKUPS=[
+  {id:'mockup_package',  label:'Mockup 1'},
+  {id:'mockup2_package', label:'Mockup 2'},
+  {id:'mockup3_package', label:'Mockup 3'},
+  {id:'mockup4_package', label:'Mockup 4'},
+  {id:'mockup5_package', label:'Mockup 5'},
+  {id:'mockup6_package', label:'Mockup 6'},
+  {id:'mockup7_package', label:'Mockup 7'},
+  {id:'mockup8_package', label:'Mockup 8'},
+  {id:'mockup9_package', label:'Mockup 9'},
+  {id:'mockup10_package',label:'Mockup 10'},
+  {id:'mockup11_package',label:'Mockup 11'},
+  {id:'mockup12_package',label:'Mockup 12'},
+  {id:'mockup13_package',label:'Mockup 13'},
+];
+const galleryGrid=document.getElementById('galleryGrid');
+MOCKUPS.forEach(m=>{
+  const card=document.createElement('div');
+  card.className='gallery-card';
+  card.innerHTML='<img src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy"><div class="label">'+m.label+'</div>';
+  card.addEventListener('click',()=>openEditor(m.id));
+  galleryGrid.appendChild(card);
+});
+function openEditor(name){
   currentMockup=name;
-  document.querySelectorAll('.mockup-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById(btnId).classList.add('active');
+  document.getElementById('galleryView').style.display='none';
+  document.getElementById('editorView').style.display='flex';
+  document.getElementById('subText').textContent='Upload your design — position it and pick a color';
   loadMockupAssets(name);
 }
-loadMockupAssets('mockup_package');
+function showGallery(){
+  document.getElementById('editorView').style.display='none';
+  document.getElementById('galleryView').style.display='block';
+  document.getElementById('subText').textContent='Choose a mockup to start designing';
+}
+document.getElementById('backBtn').addEventListener('click',showGallery);
 
 // ── Warp lookup ───────────────────────────────────────────────────────────
 function buildWarpLookup(){
