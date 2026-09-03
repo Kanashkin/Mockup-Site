@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mockup Generator</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{--bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;--accent:#e93323;--text:#f0f0f0;--muted:#555}
@@ -233,7 +234,7 @@
   </div>
 
   <div class="result-col">
-    <div class="card">
+    <div class="card" id="resultCard" style="display:none">
       <div class="card-title">High-Res Result</div>
       <div class="card-body">
         <div class="status" id="status"></div>
@@ -547,6 +548,13 @@ function openEditor(name){
   currentMockup=name;
   document.getElementById('editorView').style.display='flex';
   document.getElementById('subText').textContent='Upload your design — position it and pick a color';
+  // Fresh mockup, fresh result panel — hide any high-res result (or the
+  // empty-state placeholder) left over from a previous mockup rather than
+  // showing it before this one has been generated.
+  document.getElementById('resultCard').style.display='none';
+  document.getElementById('resultImg').classList.remove('show');
+  document.getElementById('dlBtn').classList.remove('show');
+  document.getElementById('status').className='status';document.getElementById('status').textContent='';
   loadMockupAssets(name,true);
   renderLikeGrid();
   closeFlyouts();
@@ -999,6 +1007,7 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   const sx=Math.round((pos.cx-half)*SRC_W),sy=Math.round((pos.cy-half)*SRC_H);
   const sw=Math.round(pos.size*SRC_W),sh=Math.round(pos.size*SRC_H);
   document.getElementById('renderBtn').disabled=true;
+  document.getElementById('resultCard').style.display='';
   const st=document.getElementById('status');
   st.className='status';st.innerHTML='<span class="spin"></span>Rendering…';
   document.getElementById('resultImg').classList.remove('show');
