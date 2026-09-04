@@ -444,6 +444,7 @@ function loadMockupAssets(name,resetPosition){
     newBase=tg.getImageData(0,0,CW,CH).data.slice();
     finish();
   };
+  si.onerror=()=>{console.error('Failed to load shirt_base preview for',name);if(reqId===mockupLoadSeq)showLoadError();};
   si.src='/'+name+'/'+previewName('shirt_base.png')+'?v='+Date.now();
 
   const mi=new Image();
@@ -457,12 +458,16 @@ function loadMockupAssets(name,resetPosition){
     newMask=mask;
     finish();
   };
+  mi.onerror=()=>{console.error('Failed to load shirt_mask preview for',name);if(reqId===mockupLoadSeq)showLoadError();};
   mi.src='/'+name+'/shirt_mask_preview.png?v='+Date.now();
 
   fetch('/'+name+'/warp_data.json?v='+Date.now()).then(r=>r.json()).then(d=>{
     newWarpMap=d;newSrcW=d.src_w;newSrcH=d.src_h;
     newWarped=computeWarpLookup(d);
     finish();
+  }).catch(err=>{
+    console.error('Failed to load warp_data.json for',name,err);
+    if(reqId===mockupLoadSeq)showLoadError();
   });
 
   fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
@@ -486,6 +491,7 @@ function loadMockupAssets(name,resetPosition){
         loaded[idx]={pixels:tg.getImageData(0,0,CW,CH).data,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
         subDone();
       };
+      oi.onerror=()=>{console.error('Failed to load overlay',ov.file,'for',name);if(reqId===mockupLoadSeq)showLoadError();};
       oi.src='/'+name+'/'+previewName(ov.file)+'?v='+Date.now();
     });
 
@@ -508,9 +514,28 @@ function loadMockupAssets(name,resetPosition){
         newDisp={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
         subDone();
       };
+      di.onerror=()=>{console.error('Failed to load displacement map for',name);if(reqId===mockupLoadSeq)showLoadError();};
       di.src='/'+name+'/'+previewName(disp.map)+'?v='+Date.now();
     }
+  }).catch(err=>{
+    console.error('Failed to load mockup.json for',name,err);
+    if(reqId===mockupLoadSeq)showLoadError();
   });
+}
+// Shown when a mockup's assets fail to load (bad network, server hiccup)
+// instead of leaving the preview canvas silently blank forever — the user
+// can retry by reopening the mockup or reloading the page.
+function showLoadError(){
+  ctx.clearRect(0,0,CW,CH);
+  ctx.fillStyle='#1a1a1a';
+  ctx.fillRect(0,0,CW,CH);
+  ctx.fillStyle='#e8e8e8';
+  ctx.font='bold 22px sans-serif';
+  ctx.textAlign='center';
+  ctx.fillText('Failed to load this mockup — please retry',CW/2,CH/2-14);
+  ctx.font='16px sans-serif';
+  ctx.fillText('(check your connection and reopen it)',CW/2,CH/2+16);
+  ctx.textAlign='left';
 }
 // ── Gallery (home screen) → Editor navigation ───────────────────────────────
 // `model` groups mockups shot with the same person, so "You might like" can
