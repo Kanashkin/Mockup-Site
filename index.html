@@ -1034,8 +1034,10 @@ document.getElementById('redoBtn').addEventListener('click',()=>{
 document.getElementById('renderBtn').addEventListener('click',async()=>{
   if(!file)return;
   await refreshAuthUI();
-  if(!currentUser.logged_in){openAuthModal('login');return;}
-  if(currentUser.subscription.status!=='active'){openCabinet();return;}
+  // TEMP: login gate disabled for testing — re-enable before launch
+  // if(!currentUser.logged_in){openAuthModal('login');return;}
+  // TEMP: subscription gate disabled for testing — re-enable before launch
+  // if(currentUser.subscription.status!=='active'){openCabinet();return;}
   const half=pos.size/2;
   const sx=Math.round((pos.cx-half)*SRC_W),sy=Math.round((pos.cy-half)*SRC_H);
   const sw=Math.round(pos.size*SRC_W),sh=Math.round(pos.size*SRC_H);

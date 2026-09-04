@@ -421,7 +421,9 @@ async def render_mockup(
     rot: float = Form(0),
     color: str = Form("#ffffff"),
     mockup: str = Form("mockup3_package"),
-    user: User = Depends(require_user),
+    # TEMP: login requirement disabled for testing — re-enable before launch
+    # user: User = Depends(require_user),
+    user: User | None = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     # TEMP: subscription check disabled for testing — re-enable before launch
