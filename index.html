@@ -37,9 +37,11 @@
     .card-body{padding:16px}
     .gallery{width:100%}
     .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:3px}
-    .gallery-card{background:var(--surface);border:1px solid var(--border);border-radius:0;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s}
+    .gallery-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:0;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s}
     .gallery-card:hover{border-color:var(--accent);transform:translateY(-3px)}
     .gallery-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
+    .gallery-card .preview-hover,.like-card .preview-hover{position:absolute;top:0;left:0;opacity:0;transition:opacity .25s}
+    .gallery-card:hover .preview-hover,.like-card:hover .preview-hover{opacity:1}
     .back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s}
     .back-btn:hover{border-color:var(--accent);color:var(--accent)}
     .toolbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -49,7 +51,7 @@
     .icon-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
     .icon-btn:disabled{opacity:.3;cursor:not-allowed}
     .like-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-    .like-card{border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:border-color .2s,transform .15s}
+    .like-card{position:relative;border-radius:6px;overflow:hidden;cursor:pointer;border:1px solid var(--border);transition:border-color .2s,transform .15s}
     .like-card:hover{border-color:var(--accent);transform:translateY(-2px)}
     .like-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
     .site-logo{position:fixed;top:16px;left:16px;height:34px;width:auto;z-index:50;cursor:pointer}
@@ -551,13 +553,22 @@ const MOCKUPS=[
   {id:'mockup10_package',label:'Mockup 10',model:'man1'},
   {id:'mockup11_package',label:'Mockup 11',model:'man1'},
   {id:'mockup12_package',label:'Mockup 12',model:'man1'},
-  {id:'mockup13_package',label:'Mockup 13',model:'man1'},
+  {id:'mockup13_package',label:'Mockup 13',model:'man1',hoverPreview:'shirt_preview_teal.png'},
 ];
+// Cards default to shirt_preview.png; a mockup with `hoverPreview` set gets a
+// second image stacked on top that fades in on hover (a colored preview),
+// purely a homepage visual — clicking through still opens the editor with
+// its normal blank/white default, untouched by whatever was shown on hover.
+function previewHTML(m){
+  const base='<img class="preview-base" src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
+  if(!m.hoverPreview)return base;
+  return base+'<img class="preview-hover" src="/'+m.id+'/'+m.hoverPreview+'" alt="'+m.label+'" loading="lazy">';
+}
 const galleryGrid=document.getElementById('galleryGrid');
 MOCKUPS.forEach(m=>{
   const card=document.createElement('div');
   card.className='gallery-card';
-  card.innerHTML='<img src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
+  card.innerHTML=previewHTML(m);
   card.addEventListener('click',()=>openEditor(m.id));
   galleryGrid.appendChild(card);
 });
@@ -605,7 +616,7 @@ function renderLikeGrid(){
   others.forEach(m=>{
     const c=document.createElement('div');
     c.className='like-card';
-    c.innerHTML='<img src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
+    c.innerHTML=previewHTML(m);
     c.addEventListener('click',()=>switchMockup(m.id));
     grid.appendChild(c);
   });
