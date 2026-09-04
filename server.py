@@ -424,9 +424,10 @@ async def render_mockup(
     user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
-    if not sub or not sub.is_active():
-        raise HTTPException(402, "Active subscription required to generate high-res downloads")
+    # TEMP: subscription check disabled for testing — re-enable before launch
+    # sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    # if not sub or not sub.is_active():
+    #     raise HTTPException(402, "Active subscription required to generate high-res downloads")
     engine = ENGINES.get(mockup) or list(ENGINES.values())[0]
     if not file.content_type.startswith("image/"):
         raise HTTPException(400,"File must be an image")
