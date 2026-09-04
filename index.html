@@ -415,10 +415,18 @@ function loadMockupAssets(name,resetPosition){
     // every load, not just when resetting placement now, so the "Reset"
     // button always goes back to somewhere sensible for whichever photo is
     // currently open instead of one hardcoded spot that's wrong for most.
+    // The default size also comes from the print zone's own footprint now,
+    // not a flat 0.35 for every photo — that used to sit right if a zone
+    // happened to be ~35% of the source (mockup4), but on a mockup whose
+    // print zone is much smaller (e.g. mockup3, ~10-13%), stretching a
+    // design out to 35% around that zone's center overshoots the zone
+    // itself and samples past the edge of the valid warp region — which is
+    // what made the design look shifted/cut off near the shoulder there.
     mockupDefaultPos=(newPrintZone&&newSrcW&&newSrcH)?{
       cx:(newPrintZone.x0+newPrintZone.x1)/2/newSrcW,
       cy:(newPrintZone.y0+newPrintZone.y1)/2/newSrcH,
-      size:0.35,rot:0,
+      size:Math.max((newPrintZone.x1-newPrintZone.x0)/newSrcW,(newPrintZone.y1-newPrintZone.y0)/newSrcH),
+      rot:0,
     }:{cx:0.5,cy:0.48,size:0.35,rot:0};
     if(resetPosition){
       Object.assign(pos,mockupDefaultPos);
