@@ -103,10 +103,26 @@ class MockupEngine:
         src_corners    = np.float32([[0,0],[src_w,0],[src_w,src_h],[0,src_h]])
         H_inv = np.linalg.inv(cv2.getPerspectiveTransform(src_corners, canvas_corners))
 
-        u_norm = np.array([0,1/3,2/3,1]); v_norm = np.array([0,1/3,2/3,1])
-        reg_x = np.tile(u_norm,4)*src_w; reg_y = np.repeat(v_norm,4)*src_h
+        # Photoshop's Custom Envelope Warp mesh is a 4x4 tensor-product CUBIC
+        # BEZIER control net — the surface only actually touches the 4 corner
+        # points; the other 12 are Bezier tangent handles that shape curvature
+        # without being touched. Feeding all 16 into a scattered interpolator
+        # (the old approach) forces the surface through every handle too,
+        # which produced wavy, escalating distortion that didn't match
+        # Photoshop's real (smooth) render. Instead, evaluate the true
+        # bicubic Bezier surface on a dense regular grid, then invert that
+        # dense/smooth sampling.
         mx = np.array(warp["mesh_x"]).reshape(4,4); my = np.array(warp["mesh_y"]).reshape(4,4)
-        displaced = np.column_stack([mx.ravel(),my.ravel()])
+
+        def _bezier_basis(t):
+            return np.stack([(1-t)**3, 3*t*(1-t)**2, 3*t**2*(1-t), t**3], axis=-1)
+
+        _N = 65
+        _u = np.linspace(0,1,_N); _v = np.linspace(0,1,_N)
+        _Bu = _bezier_basis(_u); _Bv = _bezier_basis(_v)
+        _Sx = _Bv @ mx @ _Bu.T; _Sy = _Bv @ my @ _Bu.T
+        reg_x = np.tile(_u,_N)*src_w; reg_y = np.repeat(_v,_N)*src_h
+        displaced = np.column_stack([_Sx.ravel(),_Sy.ravel()])
 
         print("Precomputing warp map...")
         cw,ch = self.canvas_w,self.canvas_h
@@ -130,8 +146,8 @@ class MockupEngine:
         rx_r = np.full(rw*rh,np.nan); ry_r = np.full(rw*rh,np.nan)
         ridx_r = np.where(in_r_r)[0]
         rsp_r = np.column_stack([src_x_r[in_r_r],src_y_r[in_r_r]])
-        rxv = griddata(displaced,reg_x,rsp_r,method="cubic")
-        ryv = griddata(displaced,reg_y,rsp_r,method="cubic")
+        rxv = griddata(displaced,reg_x,rsp_r,method="linear")
+        ryv = griddata(displaced,reg_y,rsp_r,method="linear")
         valid_r = ~(np.isnan(rxv)|np.isnan(ryv))
         rx_r[ridx_r[valid_r]] = rxv[valid_r]
         ry_r[ridx_r[valid_r]] = ryv[valid_r]
