@@ -29,7 +29,7 @@
     .tool-btn-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
     .tool-btn-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}
     .tool-btn-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .flyout{position:absolute;top:0;left:calc(100% + 12px);width:260px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none}
+    .flyout{position:absolute;top:0;left:0;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;box-sizing:border-box}
     .flyout.show{display:block}
     .result-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:50px 12px;line-height:1.6}
     .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -268,6 +268,14 @@ let pos={cx:0.5,cy:0.48,size:0.35,rot:0};
 // sits somewhere different in the source image. Reset goes back to this,
 // not to a single hardcoded spot that's only right for some photos.
 let mockupDefaultPos={cx:0.5,cy:0.48,size:0.35,rot:0};
+// Canvas-pixel positions of the on-screen selection handles for the current
+// design placement (4 corners + a rotate handle above the top edge),
+// recomputed every drawPreview() call by matching against the actual warped
+// geometry (see the handle-target search inside the design loop below) —
+// not a linear approximation, since the warp can skew the box visibly.
+// Each entry is {x,y} in canvas pixels, or null if that point falls outside
+// the shirt's valid warp region for the current photo.
+let handles=null;
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
@@ -327,7 +335,13 @@ function toggleFlyout(flyoutId,btnId){
   const fly=document.getElementById(flyoutId),btn=document.getElementById(btnId);
   const opening=!fly.classList.contains('show');
   closeFlyouts();
-  if(opening){fly.classList.add('show');btn.classList.add('active');}
+  if(opening){
+    // Drop the panel down from its own trigger button instead of pinning
+    // it to the top of the sidebar — at top:0 it used to land squarely
+    // over the photo's face on portrait-crop mockups.
+    fly.style.top=(btn.offsetTop+btn.offsetHeight+8)+'px';
+    fly.classList.add('show');btn.classList.add('active');
+  }
 }
 document.getElementById('toolColorBtn').addEventListener('click',e=>{e.stopPropagation();toggleFlyout('colorFlyout','toolColorBtn');});
 document.getElementById('toolAdjustBtn').addEventListener('click',e=>{e.stopPropagation();toggleFlyout('adjustFlyout','toolAdjustBtn');});
@@ -883,6 +897,21 @@ function drawPreview(){
     }
     const sd=ctx.getImageData(0,0,CW,CH),od=sd.data;
     const half=pos.size/2;
+    // Selection-handle targets, in the same (su,sv) fraction space as the
+    // warp lookup: the 4 corners of the placement box, its center, and a
+    // point a bit above the top edge for the rotate handle. Matched against
+    // the actual warped geometry below (nearest on-screen pixel per target)
+    // instead of assuming a linear/unwarped mapping, since the perspective
+    // warp can visibly skew the box — this keeps the handles sitting exactly
+    // on the design's true rendered corners.
+    const hTargets=[
+      {u:pos.cx-half,v:pos.cy-half},{u:pos.cx+half,v:pos.cy-half},
+      {u:pos.cx+half,v:pos.cy+half},{u:pos.cx-half,v:pos.cy+half},
+      {u:pos.cx,v:pos.cy},
+      {u:pos.cx,v:pos.cy-half-0.05},
+    ];
+    const hBestD=[Infinity,Infinity,Infinity,Infinity,Infinity,Infinity];
+    const hBestP=[null,null,null,null,null,null];
     for(let py=0;py<CH;py++){
       for(let px=0;px<CW;px++){
         let qx=px,qy=py;
@@ -895,6 +924,11 @@ function drawPreview(){
         }
         const wi=(qy*CW+qx)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
         if(su<0)continue;
+        for(let t=0;t<6;t++){
+          const ddx=su-hTargets[t].u,ddy=sv-hTargets[t].v;
+          const dd2=ddx*ddx+ddy*ddy;
+          if(dd2<hBestD[t]){hBestD[t]=dd2;hBestP[t]={x:px,y:py};}
+        }
         const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
         if(du<0||du>=1||dv<0||dv>=1)continue;
         const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
@@ -916,6 +950,13 @@ function drawPreview(){
       }
     }
     ctx.putImageData(sd,0,0);
+    handles={
+      corners:[hBestP[0],hBestP[1],hBestP[2],hBestP[3]],
+      center:hBestP[4],
+      rotate:hBestP[5],
+    };
+  }else{
+    handles=null;
   }
 
   // Step 4 (mirrors server.py): shading overlays (Grey/Light/Shadow/Texture), clipped by shirt mask,
@@ -944,6 +985,68 @@ function drawPreview(){
   }
 
   drawWatermark();
+  drawHandles();
+}
+
+// ── Selection handles (Photoshop-style drag to resize/rotate) ─────────────
+// handles.corners are in on-screen order [top-left, top-right, bottom-right,
+// bottom-left] as the placement box sits in (unrotated) u,v space — see the
+// hTargets search above. Any entry can be null if that point fell outside
+// the shirt's valid warp region (e.g. box dragged mostly off the print
+// area); drawing/hit-testing simply skip a null handle.
+function drawHandles(){
+  if(!handles)return;
+  const c=handles.corners;
+  ctx.save();
+  if(c[0]&&c[1]&&c[2]&&c[3]){
+    ctx.strokeStyle='rgba(255,255,255,.9)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([5,4]);
+    ctx.beginPath();
+    ctx.moveTo(c[0].x,c[0].y);ctx.lineTo(c[1].x,c[1].y);
+    ctx.lineTo(c[2].x,c[2].y);ctx.lineTo(c[3].x,c[3].y);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // Rotate handle: a line from the top edge's midpoint up to a small circle.
+  if(handles.rotate&&c[0]&&c[1]){
+    const mx=(c[0].x+c[1].x)/2,my=(c[0].y+c[1].y)/2;
+    ctx.strokeStyle='rgba(255,255,255,.9)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(handles.rotate.x,handles.rotate.y);ctx.stroke();
+    ctx.beginPath();ctx.arc(handles.rotate.x,handles.rotate.y,9,0,Math.PI*2);
+    ctx.fillStyle='#fff';ctx.fill();
+    ctx.strokeStyle='#c0392b';ctx.lineWidth=1.5;ctx.stroke();
+  }
+  // Corner squares (resize handles).
+  c.forEach(p=>{
+    if(!p)return;
+    ctx.fillStyle='#fff';
+    ctx.strokeStyle='#c0392b';
+    ctx.lineWidth=1.5;
+    ctx.fillRect(p.x-8,p.y-8,16,16);
+    ctx.strokeRect(p.x-8,p.y-8,16,16);
+  });
+  ctx.restore();
+}
+function handleAt(px,py){
+  // Returns which handle (if any) is within grab range of a canvas point,
+  // checked rotate-handle first since it sits just outside the corners and
+  // would otherwise be shadowed by the nearest corner's hit radius.
+  if(!handles)return null;
+  const R=22;
+  if(handles.rotate){
+    const d=Math.hypot(px-handles.rotate.x,py-handles.rotate.y);
+    if(d<=R)return{type:'rotate'};
+  }
+  const names=['tl','tr','br','bl'];
+  for(let i=0;i<4;i++){
+    const p=handles.corners[i];
+    if(!p)continue;
+    if(Math.hypot(px-p.x,py-p.y)<=R)return{type:'resize',corner:names[i]};
+  }
+  return null;
 }
 
 // ── Sliders ───────────────────────────────────────────────────────────────
@@ -977,17 +1080,65 @@ document.getElementById('rotate90Btn').addEventListener('click',()=>{
   syncSliders();drawPreview();pushHistory();
 });
 
-// ── Drag on canvas ────────────────────────────────────────────────────────
-let dragging=false,dsx,dsy,dcx,dcy;
-canvas.addEventListener('mousedown',e=>{if(!designImg)return;dragging=true;dsx=e.offsetX;dsy=e.offsetY;dcx=pos.cx;dcy=pos.cy;e.preventDefault();});
-document.addEventListener('mousemove',e=>{
-  if(!dragging)return;
+// ── Drag on canvas (move, or resize/rotate via the selection handles) ─────
+// Three mutually-exclusive modes, chosen on mousedown by what's under the
+// pointer: a corner handle resizes (scaling pos.size around the fixed
+// center, same as the Size slider/wheel), the handle above the top edge
+// rotates (dragging in a circle around the box center), and anywhere else
+// on the design falls back to the original move behavior.
+// The canvas is drawn at CWxCH (920x1380) but displayed at half that size
+// via CSS — handles[] and every pos computation live in the CW/CH buffer
+// space, so mouse coordinates (which arrive in CSS-pixel space) need to be
+// scaled up by CW/rect.width, CH/rect.height before comparing against them.
+// (offsetX/offsetY are also CSS pixels, same fix applies there.)
+function canvasXY(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
-  pos.cx=Math.max(0,Math.min(1,dcx+(e.clientX-rect.left-dsx)/CW));
-  pos.cy=Math.max(0,Math.min(1,dcy+(e.clientY-rect.top-dsy)/CH));
+  return{x:(clientX-rect.left)*(CW/rect.width),y:(clientY-rect.top)*(CH/rect.height)};
+}
+let dragMode=null;
+let dsx,dsy,dcx,dcy,dStartSize,dStartDist,dStartRot,dStartAngle,dCenterPx;
+canvas.addEventListener('mousedown',e=>{
+  if(!designImg)return;
+  const p=canvasXY(e.clientX,e.clientY);
+  const hit=handleAt(p.x,p.y);
+  if(hit&&hit.type==='resize'&&handles.center){
+    dragMode='resize';
+    dCenterPx=handles.center;
+    dStartSize=pos.size;
+    dStartDist=Math.max(1,Math.hypot(p.x-dCenterPx.x,p.y-dCenterPx.y));
+  }else if(hit&&hit.type==='rotate'&&handles.center){
+    dragMode='rotate';
+    dCenterPx=handles.center;
+    dStartRot=pos.rot||0;
+    dStartAngle=Math.atan2(p.y-dCenterPx.y,p.x-dCenterPx.x)*180/Math.PI;
+  }else{
+    dragMode='move';
+    dsx=p.x;dsy=p.y;dcx=pos.cx;dcy=pos.cy;
+  }
+  e.preventDefault();
+});
+document.addEventListener('mousemove',e=>{
+  if(!dragMode)return;
+  const p=canvasXY(e.clientX,e.clientY);
+  if(dragMode==='resize'){
+    const dist=Math.hypot(p.x-dCenterPx.x,p.y-dCenterPx.y);
+    pos.size=Math.max(0.05,Math.min(0.9,dStartSize*(dist/dStartDist)));
+  }else if(dragMode==='rotate'){
+    const ang=Math.atan2(p.y-dCenterPx.y,p.x-dCenterPx.x)*180/Math.PI;
+    pos.rot=Math.max(-45,Math.min(45,dStartRot+(ang-dStartAngle)));
+  }else{
+    pos.cx=Math.max(0,Math.min(1,dcx+(p.x-dsx)/CW));
+    pos.cy=Math.max(0,Math.min(1,dcy+(p.y-dsy)/CH));
+  }
   syncSliders();drawPreview();
 });
-document.addEventListener('mouseup',()=>{if(dragging){dragging=false;pushHistory();}});
+document.addEventListener('mouseup',()=>{if(dragMode){dragMode=null;pushHistory();}});
+canvas.addEventListener('mousemove',e=>{
+  if(dragMode||!designImg)return;
+  const p=canvasXY(e.clientX,e.clientY);
+  const hit=handleAt(p.x,p.y);
+  canvas.style.cursor=hit?(hit.type==='rotate'?'grab':'nwse-resize'):(canvas.classList.contains('has-design')?'move':'default');
+});
 let wheelHistTimer=null;
 canvas.addEventListener('wheel',e=>{
   if(!designImg)return;
