@@ -42,6 +42,7 @@
     .gallery-card img{width:100%;aspect-ratio:460/690;object-fit:cover;object-position:top;display:block;background:#222}
     .gallery-card .preview-hover,.like-card .preview-hover{position:absolute;top:0;left:0;opacity:0;transition:opacity .25s}
     .gallery-card:hover .preview-hover,.like-card:hover .preview-hover{opacity:1}
+    .card-count{position:absolute;bottom:8px;right:8px;background:rgba(15,15,15,.75);border:1px solid var(--border);color:var(--text);font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;pointer-events:none}
     .back-btn{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:6px;transition:border-color .2s,color .2s}
     .back-btn:hover{border-color:var(--accent);color:var(--accent)}
     .toolbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -158,6 +159,11 @@
 
 <div class="gallery" id="galleryView">
   <div class="gallery-grid" id="galleryGrid"></div>
+</div>
+
+<div class="gallery" id="modelGroupView" style="display:none">
+  <button class="back-btn" id="modelGroupBackBtn">← Back to designs</button>
+  <div class="gallery-grid" id="modelGroupGrid"></div>
 </div>
 
 <div class="cabinet" id="cabinetView" style="display:none">
@@ -564,6 +570,7 @@ function showLoadError(){
 // show other poses of that same model rather than a random mix of everyone.
 const MOCKUPS=[
   {id:'mockup1_package', label:'Mockup 1', model:'man2'},
+  {id:'mockup14_package',label:'Mockup 14',model:'man2'},
   {id:'mockup3_package', label:'Mockup 3', model:'man1'},
   {id:'mockup4_package', label:'Mockup 4', model:'man1'},
   {id:'mockup5_package', label:'Mockup 5', model:'man1',hoverPreview:'shirt_preview_purple.png'},
@@ -585,16 +592,58 @@ function previewHTML(m){
   if(!m.hoverPreview)return base;
   return base+'<img class="preview-hover" src="/'+m.id+'/'+m.hoverPreview+'" alt="'+m.label+'" loading="lazy">';
 }
+// Models listed here show as a single card on the home screen (their first
+// photo, with a count badge) instead of one card per photo — for a model
+// shot in many near-identical poses/outfits, a wall of near-duplicate
+// thumbnails is worse than "here's this person, pick a photo of them".
+// Existing individually-curated mockups (man1) are left ungrouped/unchanged.
+const GROUPED_MODELS=new Set(['man2']);
+function modelGroups(){
+  const groups={};
+  MOCKUPS.forEach(m=>{(groups[m.model]=groups[m.model]||[]).push(m);});
+  return groups;
+}
 const galleryGrid=document.getElementById('galleryGrid');
-MOCKUPS.forEach(m=>{
-  const card=document.createElement('div');
-  card.className='gallery-card';
-  card.innerHTML=previewHTML(m);
-  card.addEventListener('click',()=>openEditor(m.id));
-  galleryGrid.appendChild(card);
-});
+{
+  const groups=modelGroups();
+  const renderedGroup=new Set();
+  MOCKUPS.forEach(m=>{
+    if(GROUPED_MODELS.has(m.model)){
+      if(renderedGroup.has(m.model))return;
+      renderedGroup.add(m.model);
+      const list=groups[m.model];
+      const card=document.createElement('div');
+      card.className='gallery-card';
+      card.innerHTML=previewHTML(list[0])+(list.length>1?'<div class="card-count">'+list.length+' photos</div>':'');
+      card.addEventListener('click',()=>openModelGroup(m.model));
+      galleryGrid.appendChild(card);
+    }else{
+      const card=document.createElement('div');
+      card.className='gallery-card';
+      card.innerHTML=previewHTML(m);
+      card.addEventListener('click',()=>openEditor(m.id));
+      galleryGrid.appendChild(card);
+    }
+  });
+}
+function openModelGroup(model){
+  hideAllViews();
+  document.getElementById('modelGroupView').style.display='block';
+  document.getElementById('subText').textContent='';
+  const grid=document.getElementById('modelGroupGrid');
+  grid.innerHTML='';
+  modelGroups()[model].forEach(m=>{
+    const c=document.createElement('div');
+    c.className='gallery-card';
+    c.innerHTML=previewHTML(m);
+    c.addEventListener('click',()=>openEditor(m.id));
+    grid.appendChild(c);
+  });
+}
+document.getElementById('modelGroupBackBtn').addEventListener('click',showGallery);
 function hideAllViews(){
   document.getElementById('galleryView').style.display='none';
+  document.getElementById('modelGroupView').style.display='none';
   document.getElementById('editorView').style.display='none';
   document.getElementById('cabinetView').style.display='none';
   document.getElementById('pricingView').style.display='none';
