@@ -569,20 +569,20 @@ function showLoadError(){
 // `model` groups mockups shot with the same person, so "You might like" can
 // show other poses of that same model rather than a random mix of everyone.
 const MOCKUPS=[
-  {id:'mockup1_package', label:'Mockup 1', model:'man2'},
-  {id:'mockup14_package',label:'Mockup 14',model:'man2'},
-  {id:'mockup15_package',label:'Mockup 15',model:'man2'},
-  {id:'mockup16_package',label:'Mockup 16',model:'man2'},
-  {id:'mockup17_package',label:'Mockup 17',model:'man2'},
-  {id:'mockup18_package',label:'Mockup 18',model:'man2'},
-  {id:'mockup19_package',label:'Mockup 19',model:'man2'},
-  {id:'mockup20_package',label:'Mockup 20',model:'man2'},
-  {id:'mockup21_package',label:'Mockup 21',model:'man2'},
-  {id:'mockup22_package',label:'Mockup 22',model:'man2'},
-  {id:'mockup23_package',label:'Mockup 23',model:'man2'},
-  {id:'mockup24_package',label:'Mockup 24',model:'man2'},
-  {id:'mockup25_package',label:'Mockup 25',model:'man2'},
-  {id:'mockup26_package',label:'Mockup 26',model:'man2'},
+  {id:'mockup1_package', label:'Mockup 1', model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup14_package',label:'Mockup 14',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup15_package',label:'Mockup 15',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup16_package',label:'Mockup 16',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup17_package',label:'Mockup 17',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup18_package',label:'Mockup 18',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup19_package',label:'Mockup 19',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup20_package',label:'Mockup 20',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup21_package',label:'Mockup 21',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup22_package',label:'Mockup 22',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup23_package',label:'Mockup 23',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup24_package',label:'Mockup 24',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup25_package',label:'Mockup 25',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup26_package',label:'Mockup 26',model:'man2',hoverPreview:'shirt_preview_color.png'},
   {id:'mockup3_package', label:'Mockup 3', model:'man1'},
   {id:'mockup4_package', label:'Mockup 4', model:'man1'},
   {id:'mockup5_package', label:'Mockup 5', model:'man1',hoverPreview:'shirt_preview_purple.png'},
@@ -609,7 +609,7 @@ function previewHTML(m){
 // shot in many near-identical poses/outfits, a wall of near-duplicate
 // thumbnails is worse than "here's this person, pick a photo of them".
 // Existing individually-curated mockups (man1) are left ungrouped/unchanged.
-const GROUPED_MODELS=new Set(['man2']);
+const GROUPED_MODELS=new Set(['man1','man2']);
 function modelGroups(){
   const groups={};
   MOCKUPS.forEach(m=>{(groups[m.model]=groups[m.model]||[]).push(m);});
