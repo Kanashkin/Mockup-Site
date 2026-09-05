@@ -248,7 +248,10 @@ ENGINES = {}
 for name in ["mockup1_package","mockup14_package","mockup3_package","mockup4_package",
              "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
              "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
-             "mockup13_package"]:
+             "mockup13_package","mockup15_package","mockup16_package","mockup17_package",
+             "mockup18_package","mockup19_package","mockup20_package","mockup21_package",
+             "mockup22_package","mockup23_package","mockup24_package","mockup25_package",
+             "mockup26_package"]:
     d = os.path.join(BASE_DIR, name)
     if os.path.exists(os.path.join(d, "mockup.json")):
         ENGINES[name] = MockupEngine(d)
