@@ -583,6 +583,31 @@ const MOCKUPS=[
   {id:'mockup24_package',label:'Mockup 24',model:'man2',hoverPreview:'shirt_preview_color.png'},
   {id:'mockup25_package',label:'Mockup 25',model:'man2',hoverPreview:'shirt_preview_color.png'},
   {id:'mockup26_package',label:'Mockup 26',model:'man2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup27_package',label:'Mockup 27',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup28_package',label:'Mockup 28',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup29_package',label:'Mockup 29',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup30_package',label:'Mockup 30',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup31_package',label:'Mockup 31',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup32_package',label:'Mockup 32',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup33_package',label:'Mockup 33',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup34_package',label:'Mockup 34',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup35_package',label:'Mockup 35',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup36_package',label:'Mockup 36',model:'woman1',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup37_package',label:'Mockup 37',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup38_package',label:'Mockup 38',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup39_package',label:'Mockup 39',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup40_package',label:'Mockup 40',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup41_package',label:'Mockup 41',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup42_package',label:'Mockup 42',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup43_package',label:'Mockup 43',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup44_package',label:'Mockup 44',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup45_package',label:'Mockup 45',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup46_package',label:'Mockup 46',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup47_package',label:'Mockup 47',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup48_package',label:'Mockup 48',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup49_package',label:'Mockup 49',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup50_package',label:'Mockup 50',model:'woman2',hoverPreview:'shirt_preview_color.png'},
+  {id:'mockup51_package',label:'Mockup 51',model:'woman2',hoverPreview:'shirt_preview_color.png'},
   {id:'mockup3_package', label:'Mockup 3', model:'man1'},
   {id:'mockup4_package', label:'Mockup 4', model:'man1'},
   {id:'mockup5_package', label:'Mockup 5', model:'man1',hoverPreview:'shirt_preview_purple.png'},
@@ -609,7 +634,7 @@ function previewHTML(m){
 // shot in many near-identical poses/outfits, a wall of near-duplicate
 // thumbnails is worse than "here's this person, pick a photo of them".
 // Existing individually-curated mockups (man1) are left ungrouped/unchanged.
-const GROUPED_MODELS=new Set(['man1','man2']);
+const GROUPED_MODELS=new Set(['man1','man2','woman1','woman2']);
 function modelGroups(){
   const groups={};
   MOCKUPS.forEach(m=>{(groups[m.model]=groups[m.model]||[]).push(m);});
