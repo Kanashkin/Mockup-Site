@@ -243,8 +243,14 @@ class MockupEngine:
 
         return Image.fromarray((np.clip(result,0,1)*255).astype(np.uint8)).convert("RGB")
 
-# Load engines
-ENGINES = {}
+# Mockup registry — NOT eagerly loaded. With 60+ packages (some at large
+# 2000x3000 canvas size), constructing every MockupEngine at startup held
+# them all resident in memory simultaneously and OOM-killed the container.
+# Instead we just record which package names exist here, and load/cache
+# engines lazily (see get_engine below), bounding memory to a handful of
+# recently-used mockups instead of all of them at once.
+import collections
+MOCKUP_NAMES = []
 for name in ["mockup1_package","mockup14_package","mockup3_package","mockup4_package",
              "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
              "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
@@ -264,7 +270,28 @@ for name in ["mockup1_package","mockup14_package","mockup3_package","mockup4_pac
              "mockup66_package","mockup67_package"]:
     d = os.path.join(BASE_DIR, name)
     if os.path.exists(os.path.join(d, "mockup.json")):
-        ENGINES[name] = MockupEngine(d)
+        MOCKUP_NAMES.append(name)
+
+_ENGINE_CACHE = collections.OrderedDict()
+_ENGINE_CACHE_MAX = int(os.environ.get("ENGINE_CACHE_MAX", "4"))
+
+def get_engine(name):
+    """Load a MockupEngine on first use and keep only the last
+    _ENGINE_CACHE_MAX resident, evicting the least-recently-used one once
+    the cache is full — bounds memory regardless of how many mockup
+    packages the site has."""
+    if name in _ENGINE_CACHE:
+        _ENGINE_CACHE.move_to_end(name)
+        return _ENGINE_CACHE[name]
+    if name not in MOCKUP_NAMES:
+        return None
+    d = os.path.join(BASE_DIR, name)
+    engine = MockupEngine(d)
+    _ENGINE_CACHE[name] = engine
+    _ENGINE_CACHE.move_to_end(name)
+    while len(_ENGINE_CACHE) > _ENGINE_CACHE_MAX:
+        _ENGINE_CACHE.popitem(last=False)
+    return engine
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────
@@ -459,7 +486,7 @@ async def render_mockup(
     # sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
     # if not sub or not sub.is_active():
     #     raise HTTPException(402, "Active subscription required to generate high-res downloads")
-    engine = ENGINES.get(mockup) or list(ENGINES.values())[0]
+    engine = get_engine(mockup) or get_engine(MOCKUP_NAMES[0])
     if not file.content_type.startswith("image/"):
         raise HTTPException(400,"File must be an image")
     data = await file.read()
@@ -486,6 +513,6 @@ async def render_mockup(
 
 @app.get("/health")
 def health():
-    return {"status":"ok","mockups":list(ENGINES.keys())}
+    return {"status":"ok","mockups":MOCKUP_NAMES}
 
 app.mount("/",StaticFiles(directory=BASE_DIR,html=True),name="static")
