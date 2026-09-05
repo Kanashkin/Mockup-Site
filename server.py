@@ -245,7 +245,7 @@ class MockupEngine:
 
 # Load engines
 ENGINES = {}
-for name in ["mockup3_package","mockup4_package",
+for name in ["mockup1_package","mockup3_package","mockup4_package",
              "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
              "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
              "mockup13_package"]:
