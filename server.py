@@ -45,11 +45,13 @@ def soft_light(b,bl): return np.clip(np.where(bl<=0.5,b-(1-2*bl)*b*(1-b),b+(2*bl
 def blend_multiply(b,bl): return b*bl
 def blend_screen(b,bl):   return 1-(1-b)*(1-bl)
 def blend_overlay(b,bl):  return np.where(b<=0.5,2*b*bl,1-2*(1-b)*(1-bl))
+def blend_hard_light(b,bl): return np.where(bl<=0.5,2*b*bl,1-2*(1-b)*(1-bl))
 BLEND_FNS = {
     "BlendMode.SOFT_LIGHT": soft_light,
     "BlendMode.MULTIPLY":   blend_multiply,
     "BlendMode.SCREEN":     blend_screen,
     "BlendMode.OVERLAY":    blend_overlay,
+    "BlendMode.HARD_LIGHT": blend_hard_light,
 }
 
 class MockupEngine:
@@ -267,7 +269,29 @@ for name in ["mockup1_package","mockup14_package","mockup3_package","mockup4_pac
              "mockup54_package","mockup55_package","mockup56_package","mockup57_package",
              "mockup58_package","mockup59_package","mockup60_package","mockup61_package",
              "mockup62_package","mockup63_package","mockup64_package","mockup65_package",
-             "mockup66_package","mockup67_package"]:
+             "mockup66_package","mockup67_package",
+             # 07.09 import — 6 raw PSD template packs converted via
+             # tools/import_psd_mockups.py (see that script's docstring for
+             # how the PSD Smart-Object warp data maps onto mockup.json).
+             "mockup68_package","mockup69_package","mockup70_package","mockup71_package",
+             "mockup72_package","mockup73_package","mockup74_package","mockup75_package",
+             "mockup76_package","mockup77_package","mockup78_package","mockup79_package",
+             "mockup80_package","mockup81_package","mockup82_package","mockup83_package",
+             "mockup84_package","mockup85_package","mockup86_package","mockup87_package",
+             "mockup88_package","mockup89_package","mockup90_package","mockup91_package",
+             "mockup92_package","mockup93_package","mockup94_package","mockup95_package",
+             "mockup96_package","mockup97_package","mockup98_package","mockup99_package",
+             "mockup100_package","mockup101_package","mockup102_package","mockup103_package",
+             "mockup104_package","mockup105_package","mockup106_package","mockup107_package",
+             "mockup108_package","mockup109_package","mockup110_package","mockup111_package",
+             "mockup112_package","mockup113_package","mockup114_package","mockup115_package",
+             "mockup116_package","mockup117_package","mockup118_package","mockup119_package",
+             "mockup120_package","mockup121_package","mockup122_package","mockup123_package",
+             "mockup124_package","mockup125_package","mockup126_package","mockup127_package",
+             "mockup128_package","mockup129_package","mockup130_package","mockup131_package",
+             "mockup132_package","mockup133_package","mockup134_package","mockup135_package",
+             "mockup136_package","mockup137_package","mockup138_package","mockup139_package",
+             "mockup140_package","mockup141_package"]:
     d = os.path.join(BASE_DIR, name)
     if os.path.exists(os.path.join(d, "mockup.json")):
         MOCKUP_NAMES.append(name)
