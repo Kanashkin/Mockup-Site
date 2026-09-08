@@ -24,11 +24,14 @@
     .result-col{flex:1;min-width:280px;position:sticky;top:16px}
     .editor-row{display:flex;gap:16px;align-items:flex-start}
     .tool-sidebar{width:190px;flex:0 0 190px;display:flex;flex-direction:column;gap:8px;position:relative}
-    .tool-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:border-color .2s,color .2s}
+    .tool-btn{position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:border-color .2s,color .2s}
     .tool-btn:hover,.tool-btn.active{border-color:var(--accent);color:var(--accent)}
     .tool-btn-icon{font-size:16px;width:20px;text-align:center;flex-shrink:0}
     .tool-btn-swatch{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);flex-shrink:0}
     .tool-btn-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tool-btn-badge{position:absolute;top:-7px;right:-6px;background:var(--accent);color:#fff;font-size:9px;font-weight:800;letter-spacing:.03em;padding:2px 6px;border-radius:10px;line-height:1.3;box-shadow:0 2px 6px rgba(0,0,0,.35);animation:badgePulse 1.8s ease-in-out infinite}
+    @keyframes badgePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+    .hint.intro{color:var(--text);background:rgba(233,51,35,.08);border:1px solid rgba(233,51,35,.25);border-radius:8px;padding:8px 10px;margin-top:0;margin-bottom:10px}
     .flyout{position:absolute;top:0;left:0;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;box-sizing:border-box}
     .flyout.show{display:block}
     .result-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:50px 12px;line-height:1.6}
@@ -220,6 +223,7 @@
         <button class="tool-btn" id="toolAdjustBtn">
           <span class="tool-btn-icon">⤢</span>
           <span class="tool-btn-label">Position &amp; size</span>
+          <span class="tool-btn-badge" id="adjustNewBadge">NEW</span>
         </button>
         <button class="btn" id="renderBtn" disabled style="margin-top:4px">Generate High-Res →</button>
 
@@ -232,6 +236,7 @@
           </div>
         </div>
         <div class="flyout" id="adjustFlyout">
+          <div class="hint intro" id="distortIntroHint">New: turn on <b>Distort</b> or <b>Warp</b> to bend your design so it follows the shirt's folds, instead of sitting flat.</div>
           <div class="tool-toggle-row">
             <button class="btn2 toggle" id="toolDistortBtn" title="Free-distort: drag any of the 4 corners independently">Distort</button>
             <button class="btn2 toggle" id="toolWarpBtn" title="Warp mesh: drag any of a 4×4 grid of points">Warp</button>
@@ -489,7 +494,7 @@ function loadMockupAssets(name,resetPosition){
       // than carrying over a shape that no longer matches.
       distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
       toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
-      posSlidersEl.style.display='';distortHintEl.style.display='none';
+      posSlidersEl.style.display='';distortHintEl.style.display='none';distortIntroHintEl.style.display='';
       syncSliders();
       resetHistory();
     }
@@ -1542,6 +1547,7 @@ const toolDistortBtn=document.getElementById('toolDistortBtn');
 const toolWarpBtn=document.getElementById('toolWarpBtn');
 const posSlidersEl=document.getElementById('posSliders');
 const distortHintEl=document.getElementById('distortHint');
+const distortIntroHintEl=document.getElementById('distortIntroHint');
 function setDistortMode(mode){
   const newMode=(distortMode===mode)?null:mode;
   if(newMode){
@@ -1560,6 +1566,7 @@ function setDistortMode(mode){
   toolWarpBtn.classList.toggle('active',distortMode==='warp');
   posSlidersEl.style.display=distortMode?'none':'';
   distortHintEl.style.display=distortMode?'':'none';
+  distortIntroHintEl.style.display=distortMode?'none':'';
   drawPreview();
 }
 toolDistortBtn.addEventListener('click',()=>setDistortMode('distort'));
@@ -1569,9 +1576,23 @@ document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(pos,mockupDefaultPos);
   distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
   toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
-  posSlidersEl.style.display='';distortHintEl.style.display='none';
+  posSlidersEl.style.display='';distortHintEl.style.display='none';distortIntroHintEl.style.display='';
   syncSliders();drawPreview();pushHistory();
 });
+
+// One-time "NEW" badge on Position & size, pointing people at Distort/Warp
+// — dismissed for good (this browser) the first time they open the panel.
+(function(){
+  const badge=document.getElementById('adjustNewBadge');
+  if(!badge)return;
+  let seen=false;
+  try{seen=localStorage.getItem('mockupSeenAdjustBadge')==='1';}catch(e){}
+  if(seen){badge.style.display='none';return;}
+  document.getElementById('toolAdjustBtn').addEventListener('click',()=>{
+    badge.style.display='none';
+    try{localStorage.setItem('mockupSeenAdjustBadge','1');}catch(e){}
+  },{once:true});
+})();
 document.getElementById('rotate90Btn').addEventListener('click',()=>{
   if(!designImg)return;
   // Nudges rotation in clean 15° steps, wrapping back into the slider's
