@@ -57,12 +57,7 @@
       1761.86792042354
     ]
   },
-  "print_zone": {
-    "x0": 925,
-    "y0": 954,
-    "x1": 1294,
-    "y1": 1589
-  },
+  "print_zone": {"x0": 281, "y0": 522, "x1": 781, "y1": 973},
   "displace": {
     "map": "overlay_Texture.png",
     "h_scale": 10,
