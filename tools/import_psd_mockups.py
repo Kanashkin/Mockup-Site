@@ -126,8 +126,21 @@ def convert_one(psd_path, disp_path, out_dir):
     overlays_meta = []
     for i, l in enumerate(shading):
         fname = safe_overlay_filename(l.name, i)
-        img = l.composite(viewport=psd.bbox)
-        img.convert("RGBA").save(os.path.join(out_dir, fname))
+        # These layers are "clipped" (clipping=True, clipped to the
+        # "PLACE YOUR LOGO" smart object below them) in every one of these
+        # templates. l.composite() evaluates that clip in isolation from the
+        # rest of the stack and -- with no clip base in scope -- renders fully
+        # transparent, silently producing a blank overlay (this shipped
+        # broken for mockup68-141 until caught). We don't want PSD-level
+        # clipping semantics anyway: the render engine re-clips these
+        # overlays itself via shirt_full_mask (see module docstring). So
+        # pull the layer's own raw pixels (topil(), unaffected by clipping)
+        # and place them on the full canvas at the layer's own bbox offset.
+        bbox = l.bbox
+        img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
+        if bbox is not None and bbox[2] > bbox[0] and bbox[3] > bbox[1]:
+            img.paste(l.topil().convert("RGBA"), (bbox[0], bbox[1]))
+        img.save(os.path.join(out_dir, fname))
         overlays_meta.append({
             "name": l.name,
             "file": fname,
