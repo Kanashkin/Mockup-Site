@@ -54,6 +54,92 @@ BLEND_FNS = {
     "BlendMode.HARD_LIGHT": blend_hard_light,
 }
 
+
+def _warp_triangle_into(dst_arr, src_arr, tri_src, tri_dst):
+    """Affine-warp the triangular region `tri_src` of `src_arr` onto
+    `tri_dst`'s location in `dst_arr` (mutated in place), masked to the
+    triangle. Both arrays are HxWx4 uint8. Operates only on each triangle's
+    small bounding box (not the full canvas), so this stays cheap even when
+    called ~500 times for a fine warp mesh (see _build_src_canvas_warp)."""
+    rx, ry, rw, rh = cv2.boundingRect(tri_dst.astype(np.float32))
+    if rw <= 0 or rh <= 0:
+        return
+    sx, sy, sw_, sh_ = cv2.boundingRect(tri_src.astype(np.float32))
+    if sw_ <= 0 or sh_ <= 0:
+        return
+    src_crop = src_arr[sy:sy + sh_, sx:sx + sw_]
+    if src_crop.size == 0:
+        return
+    tri_src_local = (tri_src - [sx, sy]).astype(np.float32)
+    tri_dst_local = (tri_dst - [rx, ry]).astype(np.float32)
+    M = cv2.getAffineTransform(tri_src_local, tri_dst_local)
+    warped = cv2.warpAffine(src_crop, M, (rw, rh), flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    mask = np.zeros((rh, rw), dtype=np.uint8)
+    cv2.fillConvexPoly(mask, tri_dst_local.astype(np.int32), 255)
+    dst_h, dst_w = dst_arr.shape[:2]
+    x0, y0 = max(0, rx), max(0, ry)
+    x1, y1 = min(dst_w, rx + rw), min(dst_h, ry + rh)
+    if x1 <= x0 or y1 <= y0:
+        return
+    wx0, wy0 = x0 - rx, y0 - ry
+    wx1, wy1 = wx0 + (x1 - x0), wy0 + (y1 - y0)
+    region_mask = mask[wy0:wy1, wx0:wx1] > 0
+    dst_arr[y0:y1, x0:x1][region_mask] = warped[wy0:wy1, wx0:wx1][region_mask]
+
+
+def _build_src_canvas_distort(design_img, sw, sh, corners):
+    """Place `design_img` onto a full (sw,sh) transparent canvas via a single
+    perspective (homography) warp from the design's own rectangle onto the
+    4 given corners — corners: [[x,y]x4] in absolute source-pixel
+    coordinates, order TL,TR,BR,BL (matches the client's quad convention)."""
+    dimg = design_img.convert("RGBA")
+    dw0, dh0 = dimg.size
+    src_pts = np.float32([[0, 0], [dw0, 0], [dw0, dh0], [0, dh0]])
+    dst_pts = np.float32(corners)
+    M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+    arr = np.array(dimg)
+    warped = cv2.warpPerspective(arr, M, (sw, sh), flags=cv2.INTER_LINEAR,
+                                  borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    return Image.fromarray(warped, mode="RGBA")
+
+
+def _build_src_canvas_warp(design_img, sw, sh, mesh):
+    """Place `design_img` onto a full (sw,sh) transparent canvas via a 4x4
+    cubic-Bezier control mesh (mesh: 16 [x,y] absolute source-pixel points,
+    row-major, same convention as the garment's own warp.mesh_x/mesh_y) —
+    evaluated on a fine regular grid and rasterized triangle by triangle,
+    same technique as the client-side live preview."""
+    dimg = design_img.convert("RGBA")
+    dw0, dh0 = dimg.size
+    mesh = np.array(mesh, dtype=np.float64)
+    mesh_x = mesh[:, 0].reshape(4, 4)
+    mesh_y = mesh[:, 1].reshape(4, 4)
+
+    def _bezier_basis(t):
+        return np.stack([(1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t ** 2 * (1 - t), t ** 3], axis=-1)
+
+    N = 17  # grid resolution for triangulation — smooth enough, cheap enough
+    u = np.linspace(0, 1, N); v = np.linspace(0, 1, N)
+    Bu = _bezier_basis(u); Bv = _bezier_basis(v)
+    grid_x = Bv @ mesh_x @ Bu.T
+    grid_y = Bv @ mesh_y @ Bu.T
+
+    canvas = np.zeros((sh, sw, 4), dtype=np.uint8)
+    src_arr = np.array(dimg)
+    for j in range(N - 1):
+        for i in range(N - 1):
+            s0, s1 = i / (N - 1) * dw0, (i + 1) / (N - 1) * dw0
+            t0, t1 = j / (N - 1) * dh0, (j + 1) / (N - 1) * dh0
+            quad_src = np.float32([[s0, t0], [s1, t0], [s1, t1], [s0, t1]])
+            quad_dst = np.float32([
+                [grid_x[j, i], grid_y[j, i]], [grid_x[j, i + 1], grid_y[j, i + 1]],
+                [grid_x[j + 1, i + 1], grid_y[j + 1, i + 1]], [grid_x[j + 1, i], grid_y[j + 1, i]],
+            ])
+            _warp_triangle_into(canvas, src_arr, quad_src[[0, 1, 2]], quad_dst[[0, 1, 2]])
+            _warp_triangle_into(canvas, src_arr, quad_src[[0, 2, 3]], quad_dst[[0, 2, 3]])
+    return Image.fromarray(canvas, mode="RGBA")
+
 class MockupEngine:
     def __init__(self, mockup_dir):
         print(f"Loading {mockup_dir}...")
@@ -183,7 +269,8 @@ class MockupEngine:
             out[:, :, c] = map_coordinates(rgba[:, :, c], [src_y, src_x], order=1, mode="nearest")
         return out
 
-    def render(self, design_img, x=0, y=0, w=None, h=None, color="#ffffff"):
+    def render(self, design_img, x=0, y=0, w=None, h=None, color="#ffffff",
+               distort_corners=None, warp_mesh=None):
         sw,sh = int(self.src_w),int(self.src_h)
         pz = self.print_zone
         if w is None: w = pz['x1']-pz['x0']
@@ -207,8 +294,19 @@ class MockupEngine:
         result[:,:,3] = np.maximum(result[:,:,3], self.shirt_mask)
 
         # === Step 3: Warp design onto shirt (clipped by shirt_mask) ===
-        src_canvas = Image.new("RGBA",(sw,sh),(0,0,0,0))
-        src_canvas.paste(design_img.resize((w,h),Image.LANCZOS),(x,y))
+        # distort_corners/warp_mesh (new, optional — client-side "Distort"/
+        # "Warp" tools) replace the plain resize+paste with a perspective or
+        # mesh warp of the design itself, in this SAME absolute source-pixel
+        # space, before the existing garment warp below (self._rx/self._ry)
+        # ever runs — that part doesn't know or care how src_canvas was
+        # built, so this only changes step 3's placement, nothing else.
+        if warp_mesh is not None:
+            src_canvas = _build_src_canvas_warp(design_img, sw, sh, warp_mesh)
+        elif distort_corners is not None:
+            src_canvas = _build_src_canvas_distort(design_img, sw, sh, distort_corners)
+        else:
+            src_canvas = Image.new("RGBA",(sw,sh),(0,0,0,0))
+            src_canvas.paste(design_img.resize((w,h),Image.LANCZOS),(x,y))
         dw,dh = src_canvas.size
         design_arr = np.array(src_canvas).astype(np.float32)
 
@@ -501,6 +599,12 @@ async def render_mockup(
     rot: float = Form(0),
     color: str = Form("#ffffff"),
     mockup: str = Form("mockup3_package"),
+    # Optional — set only when the client's "Distort" (4 corners) or "Warp"
+    # (4x4 mesh) tool is active; JSON-encoded [[x,y],...] in absolute
+    # source-pixel coordinates (same space as x/y/w/h above). See
+    # MockupEngine.render / _build_src_canvas_distort / _build_src_canvas_warp.
+    distort_corners: str = Form(None),
+    warp_mesh: str = Form(None),
     # TEMP: login requirement disabled for testing — re-enable before launch
     # user: User = Depends(require_user),
     user: User | None = Depends(get_current_user),
@@ -521,14 +625,28 @@ async def render_mockup(
     except:
         raise HTTPException(400,"Could not read image")
 
-    if rot:
+    parsed_corners = None
+    parsed_mesh = None
+    try:
+        if warp_mesh:
+            parsed_mesh = json.loads(warp_mesh)
+        elif distort_corners:
+            parsed_corners = json.loads(distort_corners)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Invalid distort_corners/warp_mesh")
+
+    if rot and not parsed_corners and not parsed_mesh:
+        # Distort/Warp corners already encode any rotation directly, so the
+        # client skips sending rot (leaves it 0) whenever either is active —
+        # this pre-rotation only applies to the plain move/resize placement.
         # Negated to match the client canvas's rotation direction (canvas
         # ctx.rotate() is clockwise-positive, PIL's rotate() is
         # counter-clockwise-positive) so the live preview and the final
         # high-res render look the same for a given slider value.
         design = design.rotate(-rot, expand=True, resample=Image.BICUBIC)
 
-    result = engine.render(design,x=x,y=y,w=w,h=h,color=color)
+    result = engine.render(design,x=x,y=y,w=w,h=h,color=color,
+                            distort_corners=parsed_corners,warp_mesh=parsed_mesh)
     buf = io.BytesIO()
     result.save(buf,format="PNG",optimize=True)
     buf.seek(0)

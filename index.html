@@ -98,6 +98,9 @@
     .btn:hover:not(:disabled){opacity:.85}
     .btn2{width:100%;padding:10px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;margin-top:8px;transition:border-color .2s,color .2s}
     .btn2:hover{border-color:var(--accent);color:var(--accent)}
+    .tool-toggle-row{display:flex;gap:8px}
+    .tool-toggle-row .btn2{margin-top:0;width:auto;flex:1}
+    .btn2.toggle.active{border-color:var(--accent);color:var(--accent);background:rgba(233,51,35,.1)}
     .dl{display:none;width:100%;margin-top:10px;padding:11px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:600;text-align:center;text-decoration:none}
     .dl.show{display:block}
     #resultImg{width:100%;border-radius:8px;display:none;margin-top:8px}
@@ -229,12 +232,17 @@
           </div>
         </div>
         <div class="flyout" id="adjustFlyout">
-          <div class="sliders">
+          <div class="tool-toggle-row">
+            <button class="btn2 toggle" id="toolDistortBtn" title="Free-distort: drag any of the 4 corners independently">Distort</button>
+            <button class="btn2 toggle" id="toolWarpBtn" title="Warp mesh: drag any of a 4×4 grid of points">Warp</button>
+          </div>
+          <div class="sliders" id="posSliders">
             <div class="row"><label>Size</label><input type="range" id="sSize" min="5" max="80" value="35"><span id="vSize">35%</span></div>
             <div class="row"><label>X</label><input type="range" id="sX" min="0" max="100" value="50"><span id="vX">50%</span></div>
             <div class="row"><label>Y</label><input type="range" id="sY" min="0" max="100" value="48"><span id="vY">48%</span></div>
             <div class="row"><label>Rotate</label><input type="range" id="sRot" min="-45" max="45" value="0"><span id="vRot">0°</span></div>
           </div>
+          <div class="hint" id="distortHint" style="display:none">Drag the points directly on the design. Dragging inside (not on a point) moves the whole thing.</div>
           <button class="btn2" id="resetBtn">↺ Reset</button>
         </div>
       </div>
@@ -288,6 +296,24 @@ let mockupDefaultPos={cx:0.5,cy:0.48,size:0.35,rot:0};
 // Each entry is {x,y} in canvas pixels, or null if that point falls outside
 // the shirt's valid warp region for the current photo.
 let handles=null;
+
+// ── Distort / Warp trial (real-site version of the standalone prototype) ──
+// Optional alternative placement tools, opt-in via the two toggle buttons
+// above the sliders. Off (distortMode=null) behaves exactly as before: an
+// axis-aligned box driven by pos.{cx,cy,size,rot}. 'distort' lets the user
+// drag any of 4 independent corners (a single perspective warp of the
+// design — see server.py's _build_src_canvas_distort). 'warp' exposes a 4x4
+// grid of control points evaluated as a cubic-Bezier surface (a smooth mesh
+// warp — see _build_src_canvas_warp). Both are stored in the same (u,v)
+// source-fraction space as pos.cx/cy (fractions of SRC_W/SRC_H), seeded
+// from the current pos the first time a tool is used, and kept in sync via
+// quadLastEdited so switching tools — or back to the plain box — never
+// resets what the user already did.
+let distortMode=null; // null | 'distort' | 'warp'
+let quadCorners=null; // [{u,v}x4] TL,TR,BR,BL
+let meshPoints=null;  // [{u,v}x16] row-major 4x4 (row0=top edge, row3=bottom edge)
+let quadLastEdited='corners'; // 'corners' | 'mesh' — whichever the user edited most recently
+let quadHandlePos=null; // canvas-pixel positions of the active tool's draggable points, recomputed every drawPreview()
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
@@ -458,6 +484,12 @@ function loadMockupAssets(name,resetPosition){
     }:{cx:0.5,cy:0.48,size:0.35,rot:0};
     if(resetPosition){
       Object.assign(pos,mockupDefaultPos);
+      // A new photo means a different print zone — the Distort/Warp shape
+      // (if any) was fitted to the old one, so it goes back to off rather
+      // than carrying over a shape that no longer matches.
+      distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
+      toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
+      posSlidersEl.style.display='';distortHintEl.style.display='none';
       syncSliders();
       resetHistory();
     }
@@ -1033,6 +1065,174 @@ function drawWatermark(){
   ctx.restore();
 }
 
+// ── Distort / Warp geometry ─────────────────────────────────────────────
+// All of this operates in (u,v) source-fraction space (same space as
+// pos.cx/cy) — the same space warpedPixels already samples into for every
+// canvas pixel, so it slots into the existing per-pixel compositing loop
+// below without changing anything about how the garment warp itself works.
+function cornersFromPos(){
+  const half=pos.size/2;
+  return[
+    {u:pos.cx-half,v:pos.cy-half},{u:pos.cx+half,v:pos.cy-half},
+    {u:pos.cx+half,v:pos.cy+half},{u:pos.cx-half,v:pos.cy+half},
+  ];
+}
+// Bilinear 4x4 grid spanning the 4 corners — used when entering Warp mode
+// right after editing the plain Distort quad, so the mesh starts out as
+// exactly that quad instead of resetting to the default rectangle.
+function meshFromCornersArr(c){
+  const m=new Array(16);
+  for(let r=0;r<4;r++){
+    const v=r/3;
+    const lx=c[0].u+(c[3].u-c[0].u)*v,ly=c[0].v+(c[3].v-c[0].v)*v; // left edge TL->BL
+    const rx=c[1].u+(c[2].u-c[1].u)*v,ry=c[1].v+(c[2].v-c[1].v)*v; // right edge TR->BR
+    for(let col=0;col<4;col++){
+      const u=col/3;
+      m[r*4+col]={u:lx+(rx-lx)*u,v:ly+(ry-ly)*u};
+    }
+  }
+  return m;
+}
+// Collapses a mesh back to its 4 outer corners (TL,TR,BR,BL = indices
+// 0,3,15,12 of the row-major 4x4) — used when switching from Warp to
+// Distort so the quad picks up wherever the mesh's corners currently are.
+function cornersFromMeshArr(m){return[m[0],m[3],m[15],m[12]];}
+
+function bezierBasisJS(t){const mt=1-t;return[mt*mt*mt,3*t*mt*mt,3*t*t*mt,t*t*t];}
+// Evaluates the 4x4 control mesh (row-major, row=v-direction, col=u-direction —
+// matches server.py's mesh_x/mesh_y reshape(4,4)) as a cubic-Bezier surface
+// at design-local parameters (u,v) in [0,1]x[0,1].
+function evalMeshPoint(mesh,u,v){
+  const Bu=bezierBasisJS(u),Bv=bezierBasisJS(v);
+  let x=0,y=0;
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    const w=Bv[r]*Bu[c],p=mesh[r*4+c];
+    x+=p.u*w;y+=p.v*w;
+  }
+  return{u:x,v:y};
+}
+// Builds a fine NxN forward grid of the Bezier surface and splits each cell
+// into 2 triangles (same split as server.py's _build_src_canvas_warp), each
+// tagged with its own design-local (s,t) corners — this is what lets us go
+// the OTHER way (a source-fraction point -> which design pixel it samples)
+// which has no closed form for a Bezier surface, unlike the single
+// perspective quad below.
+function buildMeshTriangles(mesh,N){
+  const grid=new Array(N);
+  for(let j=0;j<N;j++){
+    grid[j]=new Array(N);
+    for(let i=0;i<N;i++)grid[j][i]=evalMeshPoint(mesh,i/(N-1),j/(N-1));
+  }
+  const tris=[];
+  for(let j=0;j<N-1;j++){
+    for(let i=0;i<N-1;i++){
+      const s0=i/(N-1),s1=(i+1)/(N-1),t0=j/(N-1),t1=(j+1)/(N-1);
+      const p00=grid[j][i],p10=grid[j][i+1],p11=grid[j+1][i+1],p01=grid[j+1][i];
+      tris.push({a:p00,b:p10,c:p11,sa:s0,ta:t0,sb:s1,tb:t0,sc:s1,tc:t1});
+      tris.push({a:p00,b:p11,c:p01,sa:s0,ta:t0,sb:s1,tb:t1,sc:s0,tc:t1});
+    }
+  }
+  return tris;
+}
+function baryWeights(px,py,ax,ay,bx,by,cx,cy){
+  const v0x=bx-ax,v0y=by-ay,v1x=cx-ax,v1y=cy-ay,v2x=px-ax,v2y=py-ay;
+  const den=v0x*v1y-v1x*v0y;
+  if(Math.abs(den)<1e-12)return null;
+  const v=(v2x*v1y-v1x*v2y)/den,w=(v0x*v2y-v2x*v0y)/den,u=1-v-w;
+  if(u<-1e-6||v<-1e-6||w<-1e-6)return null;
+  return{u,v,w};
+}
+function locateInMeshTriangles(px,py,tris){
+  for(let k=0;k<tris.length;k++){
+    const t=tris[k];
+    const bw=baryWeights(px,py,t.a.u,t.a.v,t.b.u,t.b.v,t.c.u,t.c.v);
+    if(!bw)continue;
+    return{s:bw.u*t.sa+bw.v*t.sb+bw.w*t.sc,t:bw.u*t.ta+bw.v*t.tb+bw.w*t.tc};
+  }
+  return null;
+}
+function bboxOf(pts){
+  let minU=Infinity,maxU=-Infinity,minV=Infinity,maxV=-Infinity;
+  for(const p of pts){
+    if(p.u<minU)minU=p.u;if(p.u>maxU)maxU=p.u;
+    if(p.v<minV)minV=p.v;if(p.v>maxV)maxV=p.v;
+  }
+  return{minU,maxU,minV,maxV};
+}
+// Generic 4-point homography (DLT) — used for the Distort quad: maps the
+// design's unit square (0,0)-(1,0)-(1,1)-(0,1) onto the 4 quad corners,
+// mirroring server.py's cv2.getPerspectiveTransform. The client only needs
+// the INVERSE (quad -> unit square) to test containment/sample the design,
+// computed once per drawPreview() call, not per pixel.
+function solveLinear8(A,b){
+  const n=8,M=A.map((row,i)=>row.concat([b[i]]));
+  for(let col=0;col<n;col++){
+    let piv=col;
+    for(let r=col+1;r<n;r++)if(Math.abs(M[r][col])>Math.abs(M[piv][col]))piv=r;
+    [M[col],M[piv]]=[M[piv],M[col]];
+    const pv=M[col][col]||1e-12;
+    for(let c=col;c<=n;c++)M[col][c]/=pv;
+    for(let r=0;r<n;r++){
+      if(r===col)continue;
+      const f=M[r][col];if(!f)continue;
+      for(let c=col;c<=n;c++)M[r][c]-=f*M[col][c];
+    }
+  }
+  return M.map(row=>row[n]);
+}
+function computeHomography(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){
+    const sx=src[i].x,sy=src[i].y,dx=dst[i].x,dy=dst[i].y;
+    A.push([sx,sy,1,0,0,0,-sx*dx,-sy*dx]);b.push(dx);
+    A.push([0,0,0,sx,sy,1,-sx*dy,-sy*dy]);b.push(dy);
+  }
+  const h=solveLinear8(A,b);
+  return[h[0],h[1],h[2],h[3],h[4],h[5],h[6],h[7],1];
+}
+function invert3x3(m){
+  const[a,b,c,d,e,f,g,h,i]=m;
+  const A=e*i-f*h,B=-(d*i-f*g),C=d*h-e*g;
+  const D=-(b*i-c*h),E=a*i-c*g,F=-(a*h-b*g);
+  const G=b*f-c*e,H=-(a*f-c*d),I=a*e-b*d;
+  const det=a*A+b*B+c*C;
+  if(Math.abs(det)<1e-12)return null;
+  const inv=1/det;
+  return[A*inv,D*inv,G*inv,B*inv,E*inv,H*inv,C*inv,F*inv,I*inv];
+}
+function applyHomography(m,x,y){
+  const w=m[6]*x+m[7]*y+m[8];
+  if(Math.abs(w)<1e-12)return null;
+  return{x:(m[0]*x+m[1]*y+m[2])/w,y:(m[3]*x+m[4]*y+m[5])/w};
+}
+// Direct canvas-pixel -> source-fraction lookup at the cursor, reusing the
+// same warpedPixels table (+ displacement) the main compositing loop reads
+// — this is the easy direction (unlike the per-pixel loop's target search,
+// which goes the other way), so dragging a handle can just place it exactly
+// under the cursor with an O(1) lookup instead of a fresh full-canvas search.
+function lookupSourceAt(px,py){
+  if(!warpedPixels)return null;
+  let qx=Math.max(0,Math.min(CW-1,Math.round(px))),qy=Math.max(0,Math.min(CH-1,Math.round(py)));
+  if(dispData){
+    const g=dispData.gray[qy*CW+qx];
+    const dxs=(g-0.5)*2*dispData.hScale,dys=(g-0.5)*2*dispData.vScale;
+    qx=Math.min(CW-1,Math.max(0,Math.round(qx-dxs)));
+    qy=Math.min(CH-1,Math.max(0,Math.round(qy-dys)));
+  }
+  const wi=(qy*CW+qx)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
+  if(su<0)return null;
+  return{u:su,v:sv};
+}
+function quadPointAt(px,py){
+  if(!quadHandlePos)return null;
+  const R=22;
+  for(let i=0;i<quadHandlePos.length;i++){
+    const p=quadHandlePos[i];
+    if(p&&Math.hypot(px-p.x,py-p.y)<=R)return i;
+  }
+  return null;
+}
+
 // ── Draw ──────────────────────────────────────────────────────────────────
 function hexToRgb(hex){return[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255];}
 function drawPreview(){
@@ -1060,7 +1260,10 @@ function drawPreview(){
     // clockwise-positive for a positive angle here; server.py negates the
     // angle before calling PIL's counter-clockwise-positive rotate() so the
     // live preview and the final high-res download rotate the same way.
-    const rotRad=(pos.rot||0)*Math.PI/180;
+    // Distort/Warp corners already encode any rotation directly (the user
+    // drags them into place), so this pre-rotation is skipped whenever
+    // either is active — mirrors server.py's /render doing the same.
+    const rotRad=distortMode?0:(pos.rot||0)*Math.PI/180;
     const srcW=designImg.naturalWidth,srcH=designImg.naturalHeight;
     let dw=srcW,dh=srcH,dd;
     const offC=document.createElement('canvas');
@@ -1083,19 +1286,36 @@ function drawPreview(){
     const half=pos.size/2;
     // Selection-handle targets, in the same (su,sv) fraction space as the
     // warp lookup: the 4 corners of the placement box, its center, and a
-    // point a bit above the top edge for the rotate handle. Matched against
-    // the actual warped geometry below (nearest on-screen pixel per target)
-    // instead of assuming a linear/unwarped mapping, since the perspective
-    // warp can visibly skew the box — this keeps the handles sitting exactly
-    // on the design's true rendered corners.
-    const hTargets=[
-      {u:pos.cx-half,v:pos.cy-half},{u:pos.cx+half,v:pos.cy-half},
-      {u:pos.cx+half,v:pos.cy+half},{u:pos.cx-half,v:pos.cy+half},
-      {u:pos.cx,v:pos.cy},
-      {u:pos.cx,v:pos.cy-half-0.05},
-    ];
-    const hBestD=[Infinity,Infinity,Infinity,Infinity,Infinity,Infinity];
-    const hBestP=[null,null,null,null,null,null];
+    // point a bit above the top edge for the rotate handle — or, when
+    // Distort/Warp is active, the tool's own draggable points (4 quad
+    // corners, or all 16 mesh control points). Matched against the actual
+    // warped geometry below (nearest on-screen pixel per target) instead of
+    // assuming a linear/unwarped mapping, since the perspective warp can
+    // visibly skew the box — this keeps the handles sitting exactly on the
+    // design's true rendered corners, same trick either way.
+    let hTargets,quadHinv=null,quadBBox=null,meshTris=null,meshBBox=null;
+    if(distortMode==='distort'&&quadCorners){
+      hTargets=quadCorners;
+      const unitSquare=[{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+      const dst=quadCorners.map(c=>({x:c.u,y:c.v}));
+      const Hf=computeHomography(unitSquare,dst);
+      quadHinv=Hf?invert3x3(Hf):null;
+      quadBBox=bboxOf(quadCorners);
+    }else if(distortMode==='warp'&&meshPoints){
+      hTargets=meshPoints;
+      meshTris=buildMeshTriangles(meshPoints,9);
+      meshBBox=bboxOf(meshPoints);
+    }else{
+      hTargets=[
+        {u:pos.cx-half,v:pos.cy-half},{u:pos.cx+half,v:pos.cy-half},
+        {u:pos.cx+half,v:pos.cy+half},{u:pos.cx-half,v:pos.cy+half},
+        {u:pos.cx,v:pos.cy},
+        {u:pos.cx,v:pos.cy-half-0.05},
+      ];
+    }
+    const nT=hTargets.length;
+    const hBestD=new Array(nT).fill(Infinity);
+    const hBestP=new Array(nT).fill(null);
     for(let py=0;py<CH;py++){
       for(let px=0;px<CW;px++){
         let qx=px,qy=py;
@@ -1108,13 +1328,27 @@ function drawPreview(){
         }
         const wi=(qy*CW+qx)*2,su=warpedPixels[wi],sv=warpedPixels[wi+1];
         if(su<0)continue;
-        for(let t=0;t<6;t++){
+        for(let t=0;t<nT;t++){
           const ddx=su-hTargets[t].u,ddy=sv-hTargets[t].v;
           const dd2=ddx*ddx+ddy*ddy;
           if(dd2<hBestD[t]){hBestD[t]=dd2;hBestP[t]={x:px,y:py};}
         }
-        const du=(su-(pos.cx-half))/pos.size,dv=(sv-(pos.cy-half))/pos.size;
-        if(du<0||du>=1||dv<0||dv>=1)continue;
+        let du,dv;
+        if(distortMode==='distort'){
+          if(!quadHinv||su<quadBBox.minU||su>quadBBox.maxU||sv<quadBBox.minV||sv>quadBBox.maxV)continue;
+          const p2=applyHomography(quadHinv,su,sv);
+          if(!p2)continue;
+          du=p2.x;dv=p2.y;
+          if(du<0||du>=1||dv<0||dv>=1)continue;
+        }else if(distortMode==='warp'){
+          if(su<meshBBox.minU||su>meshBBox.maxU||sv<meshBBox.minV||sv>meshBBox.maxV)continue;
+          const st=locateInMeshTriangles(su,sv,meshTris);
+          if(!st)continue;
+          du=st.s;dv=st.t;
+        }else{
+          du=(su-(pos.cx-half))/pos.size;dv=(sv-(pos.cy-half))/pos.size;
+          if(du<0||du>=1||dv<0||dv>=1)continue;
+        }
         const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
         // clip to shirt silhouette (mirrors server.py's warped[:,:,3] *= self.shirt_mask) —
         // the warp lookup's valid region is padded wider than the actual shirt shape,
@@ -1134,13 +1368,19 @@ function drawPreview(){
       }
     }
     ctx.putImageData(sd,0,0);
-    handles={
-      corners:[hBestP[0],hBestP[1],hBestP[2],hBestP[3]],
-      center:hBestP[4],
-      rotate:hBestP[5],
-    };
+    if(distortMode){
+      handles=null;
+      quadHandlePos=hBestP;
+    }else{
+      handles={
+        corners:[hBestP[0],hBestP[1],hBestP[2],hBestP[3]],
+        center:hBestP[4],
+        rotate:hBestP[5],
+      };
+      quadHandlePos=null;
+    }
   }else{
-    handles=null;
+    handles=null;quadHandlePos=null;
   }
 
   // Step 4 (mirrors server.py): shading overlays (Grey/Light/Shadow/Texture), clipped by shirt mask,
@@ -1169,7 +1409,7 @@ function drawPreview(){
   }
 
   drawWatermark();
-  drawHandles();
+  if(distortMode)drawQuadHandles();else drawHandles();
 }
 
 // ── Selection handles (Photoshop-style drag to resize/rotate) ─────────────
@@ -1214,6 +1454,50 @@ function drawHandles(){
   });
   ctx.restore();
 }
+// Distort/Warp's own handle rendering, kept separate from drawHandles()
+// above to avoid any regression risk to the existing default-box path.
+// quadHandlePos entries follow quadCorners/meshPoints order (TL,TR,BR,BL
+// for Distort; row-major 4x4 for Warp) and can be null per-point, same as
+// the default path's handles.corners.
+function drawQuadHandles(){
+  if(!quadHandlePos)return;
+  const pts=quadHandlePos;
+  ctx.save();
+  if(distortMode==='distort'&&pts.length===4){
+    if(pts[0]&&pts[1]&&pts[2]&&pts[3]){
+      ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.setLineDash([5,4]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x,pts[0].y);ctx.lineTo(pts[1].x,pts[1].y);
+      ctx.lineTo(pts[2].x,pts[2].y);ctx.lineTo(pts[3].x,pts[3].y);
+      ctx.closePath();ctx.stroke();ctx.setLineDash([]);
+    }
+  }else if(distortMode==='warp'&&pts.length===16){
+    ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1;
+    for(let r=0;r<4;r++){
+      ctx.beginPath();let started=false;
+      for(let c=0;c<4;c++){
+        const p=pts[r*4+c];if(!p)continue;
+        if(!started){ctx.moveTo(p.x,p.y);started=true;}else ctx.lineTo(p.x,p.y);
+      }
+      if(started)ctx.stroke();
+    }
+    for(let c=0;c<4;c++){
+      ctx.beginPath();let started=false;
+      for(let r=0;r<4;r++){
+        const p=pts[r*4+c];if(!p)continue;
+        if(!started){ctx.moveTo(p.x,p.y);started=true;}else ctx.lineTo(p.x,p.y);
+      }
+      if(started)ctx.stroke();
+    }
+  }
+  pts.forEach(p=>{
+    if(!p)return;
+    ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);
+    ctx.fillStyle='#fff';ctx.fill();
+    ctx.strokeStyle='#c0392b';ctx.lineWidth=1.5;ctx.stroke();
+  });
+  ctx.restore();
+}
 function handleAt(px,py){
   // Returns which handle (if any) is within grab range of a canvas point,
   // checked rotate-handle first since it sits just outside the corners and
@@ -1252,7 +1536,42 @@ sSize.addEventListener('change',pushHistory);
 sX.addEventListener('change',pushHistory);
 sY.addEventListener('change',pushHistory);
 sRot.addEventListener('change',pushHistory);
-document.getElementById('resetBtn').addEventListener('click',()=>{Object.assign(pos,mockupDefaultPos);syncSliders();drawPreview();pushHistory();});
+
+// ── Distort / Warp mode toggle ───────────────────────────────────────────
+const toolDistortBtn=document.getElementById('toolDistortBtn');
+const toolWarpBtn=document.getElementById('toolWarpBtn');
+const posSlidersEl=document.getElementById('posSliders');
+const distortHintEl=document.getElementById('distortHint');
+function setDistortMode(mode){
+  const newMode=(distortMode===mode)?null:mode;
+  if(newMode){
+    // Seed from the current box the first time either tool is used, and
+    // otherwise re-derive whichever shape is about to show from whichever
+    // one the user last actually edited — so turning a tool on/switching
+    // between them always continues the current placement instead of
+    // resetting it (see quadLastEdited above).
+    if(!quadCorners)quadCorners=cornersFromPos();
+    if(!meshPoints)meshPoints=meshFromCornersArr(quadCorners);
+    if(newMode==='warp'&&quadLastEdited==='corners')meshPoints=meshFromCornersArr(quadCorners);
+    else if(newMode==='distort'&&quadLastEdited==='mesh')quadCorners=cornersFromMeshArr(meshPoints);
+  }
+  distortMode=newMode;
+  toolDistortBtn.classList.toggle('active',distortMode==='distort');
+  toolWarpBtn.classList.toggle('active',distortMode==='warp');
+  posSlidersEl.style.display=distortMode?'none':'';
+  distortHintEl.style.display=distortMode?'':'none';
+  drawPreview();
+}
+toolDistortBtn.addEventListener('click',()=>setDistortMode('distort'));
+toolWarpBtn.addEventListener('click',()=>setDistortMode('warp'));
+
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  Object.assign(pos,mockupDefaultPos);
+  distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
+  toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
+  posSlidersEl.style.display='';distortHintEl.style.display='none';
+  syncSliders();drawPreview();pushHistory();
+});
 document.getElementById('rotate90Btn').addEventListener('click',()=>{
   if(!designImg)return;
   // Nudges rotation in clean 15° steps, wrapping back into the slider's
@@ -1281,9 +1600,30 @@ function canvasXY(clientX,clientY){
 }
 let dragMode=null;
 let dsx,dsy,dcx,dcy,dStartSize,dStartDist,dStartRot,dStartAngle,dCenterPx;
+// Distort/Warp drag state: dragging a point ('quadpoint') just places it
+// under the cursor directly (O(1) lookupSourceAt); dragging the body
+// ('quadmove') translates every point by the same (u,v) delta between the
+// drag's start and current cursor position — both computed via the same
+// direct forward lookup, so this works correctly under the nonlinear
+// garment warp without needing a fresh full-canvas search per mousemove.
+let dragPointIndex=null,dragStartSrc=null,dragStartCorners=null,dragStartMesh=null;
 canvas.addEventListener('mousedown',e=>{
   if(!designImg)return;
   const p=canvasXY(e.clientX,e.clientY);
+  if(distortMode){
+    const idx=quadPointAt(p.x,p.y);
+    if(idx!=null){
+      dragMode='quadpoint';
+      dragPointIndex=idx;
+    }else{
+      dragMode='quadmove';
+      dragStartSrc=lookupSourceAt(p.x,p.y);
+      dragStartCorners=quadCorners?quadCorners.map(q=>({u:q.u,v:q.v})):null;
+      dragStartMesh=meshPoints?meshPoints.map(q=>({u:q.u,v:q.v})):null;
+    }
+    e.preventDefault();
+    return;
+  }
   const hit=handleAt(p.x,p.y);
   if(hit&&hit.type==='resize'&&handles.center){
     dragMode='resize';
@@ -1304,6 +1644,30 @@ canvas.addEventListener('mousedown',e=>{
 document.addEventListener('mousemove',e=>{
   if(!dragMode)return;
   const p=canvasXY(e.clientX,e.clientY);
+  if(dragMode==='quadpoint'){
+    const s=lookupSourceAt(p.x,p.y);
+    if(s){
+      if(distortMode==='distort'&&quadCorners){quadCorners[dragPointIndex]=s;quadLastEdited='corners';}
+      else if(distortMode==='warp'&&meshPoints){meshPoints[dragPointIndex]=s;quadLastEdited='mesh';}
+    }
+    drawPreview();
+    return;
+  }
+  if(dragMode==='quadmove'){
+    const cur=lookupSourceAt(p.x,p.y);
+    if(cur&&dragStartSrc){
+      const du=cur.u-dragStartSrc.u,dv=cur.v-dragStartSrc.v;
+      if(distortMode==='distort'&&dragStartCorners){
+        quadCorners=dragStartCorners.map(q=>({u:q.u+du,v:q.v+dv}));
+        quadLastEdited='corners';
+      }else if(distortMode==='warp'&&dragStartMesh){
+        meshPoints=dragStartMesh.map(q=>({u:q.u+du,v:q.v+dv}));
+        quadLastEdited='mesh';
+      }
+    }
+    drawPreview();
+    return;
+  }
   if(dragMode==='resize'){
     const dist=Math.hypot(p.x-dCenterPx.x,p.y-dCenterPx.y);
     pos.size=Math.max(0.05,Math.min(0.9,dStartSize*(dist/dStartDist)));
@@ -1320,12 +1684,17 @@ document.addEventListener('mouseup',()=>{if(dragMode){dragMode=null;pushHistory(
 canvas.addEventListener('mousemove',e=>{
   if(dragMode||!designImg)return;
   const p=canvasXY(e.clientX,e.clientY);
+  if(distortMode){
+    const idx=quadPointAt(p.x,p.y);
+    canvas.style.cursor=idx!=null?'grab':(canvas.classList.contains('has-design')?'move':'default');
+    return;
+  }
   const hit=handleAt(p.x,p.y);
   canvas.style.cursor=hit?(hit.type==='rotate'?'grab':'nwse-resize'):(canvas.classList.contains('has-design')?'move':'default');
 });
 let wheelHistTimer=null;
 canvas.addEventListener('wheel',e=>{
-  if(!designImg)return;
+  if(!designImg||distortMode)return;
   pos.size=Math.max(0.05,Math.min(0.9,pos.size-e.deltaY*0.001));
   syncSliders();drawPreview();
   e.preventDefault();
@@ -1384,9 +1753,6 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   // if(!currentUser.logged_in){openAuthModal('login');return;}
   // TEMP: subscription gate disabled for testing — re-enable before launch
   // if(currentUser.subscription.status!=='active'){openCabinet();return;}
-  const half=pos.size/2;
-  const sx=Math.round((pos.cx-half)*SRC_W),sy=Math.round((pos.cy-half)*SRC_H);
-  const sw=Math.round(pos.size*SRC_W),sh=Math.round(pos.size*SRC_H);
   document.getElementById('renderBtn').disabled=true;
   document.getElementById('resultCard').style.display='';
   const st=document.getElementById('status');
@@ -1395,9 +1761,20 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   document.getElementById('dlBtn').classList.remove('show');
   document.getElementById('resultPlaceholder').style.display='none';
   const form=new FormData();
-  form.append('file',file);form.append('x',sx);form.append('y',sy);
-  form.append('w',sw);form.append('h',sh);form.append('color',shirtColor);
-  form.append('mockup',currentMockup);form.append('rot',pos.rot||0);
+  form.append('file',file);form.append('color',shirtColor);form.append('mockup',currentMockup);
+  // Distort/Warp: send the corners/mesh in absolute source-pixel coordinates
+  // (same space server.py's cv2 calls expect) instead of x/y/w/h/rot — the
+  // corners/mesh already fully describe the placement, rotation included.
+  if(distortMode==='distort'&&quadCorners){
+    form.append('distort_corners',JSON.stringify(quadCorners.map(c=>[c.u*SRC_W,c.v*SRC_H])));
+  }else if(distortMode==='warp'&&meshPoints){
+    form.append('warp_mesh',JSON.stringify(meshPoints.map(c=>[c.u*SRC_W,c.v*SRC_H])));
+  }else{
+    const half=pos.size/2;
+    const sx=Math.round((pos.cx-half)*SRC_W),sy=Math.round((pos.cy-half)*SRC_H);
+    const sw=Math.round(pos.size*SRC_W),sh=Math.round(pos.size*SRC_H);
+    form.append('x',sx);form.append('y',sy);form.append('w',sw);form.append('h',sh);form.append('rot',pos.rot||0);
+  }
   try{
     const res=await fetch('/render',{method:'POST',body:form});
     if(res.status===401){openAuthModal('login');st.className='';st.textContent='';return;}
