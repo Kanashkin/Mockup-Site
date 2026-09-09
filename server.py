@@ -29,7 +29,7 @@ app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "d
 # Free tier: a logged-in account without an active subscription gets this
 # many high-res renders before /render starts requiring one (see render_mockup
 # and User.render_count in db.py).
-FREE_RENDER_LIMIT = int(os.environ.get("FREE_RENDER_LIMIT", "10"))
+FREE_RENDER_LIMIT = int(os.environ.get("FREE_RENDER_LIMIT", "5"))
 
 def public_base_url(request: Request) -> str:
     """request.base_url reflects the scheme Railway's internal proxy used to
