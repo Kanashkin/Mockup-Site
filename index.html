@@ -108,6 +108,8 @@
     .dl.show{display:block}
     #resultImg{width:100%;border-radius:8px;display:none;margin-top:8px}
     #resultImg.show{display:block}
+    #animateVideo{width:100%;border-radius:8px;display:none;margin-top:12px}
+    #animateVideo.show{display:block}
     .status{margin-top:8px;font-size:12px;color:var(--muted);text-align:center;min-height:16px}
     .status.err{color:#f66}.status.ok{color:var(--accent)}
     @keyframes spin{to{transform:rotate(360deg)}}
@@ -159,6 +161,16 @@
       Continue with Google
     </a>
     <div class="switch" id="authSwitch">Don't have an account? Sign up</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="animateModal">
+  <div class="modal-card">
+    <button class="modal-close" id="animateModalClose">✕</button>
+    <h2>Oживить</h2>
+    <div class="status" id="animateStatusText">Generating your video — this can take a minute or two…</div>
+    <video id="animateVideo" controls playsinline></video>
+    <a class="dl" id="animateDlBtn" target="_blank" rel="noopener" style="margin-top:10px">↓ Download video</a>
   </div>
 </div>
 
@@ -264,6 +276,7 @@
         <p class="result-placeholder" id="resultPlaceholder">Your high-res mockup will appear here after you click Generate.</p>
         <img id="resultImg" alt="result">
         <a class="dl" id="dlBtn" download="mockup.png">↓ Download PNG</a>
+        <button class="dl" id="animateBtn" type="button" style="cursor:pointer">🎬 Oживить — $<span id="animatePrice">1.99</span></button>
       </div>
     </div>
 
@@ -895,6 +908,8 @@ async function refreshAuthUI(){
   }else{
     guest.style.display='inline-flex';userEl.style.display='none';
   }
+  if(currentUser.animate_price_usd)document.getElementById('animatePrice').textContent=currentUser.animate_price_usd;
+  if(!currentUser.animate_available)document.getElementById('animateBtn').classList.remove('show');
   return currentUser;
 }
 function openAuthModal(mode){
@@ -1795,6 +1810,7 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   document.getElementById('resultImg').classList.remove('show');
   document.getElementById('dlBtn').classList.remove('show');
   document.getElementById('resultPlaceholder').style.display='none';
+  resetAnimateBox();
   const form=new FormData();
   form.append('file',file);form.append('color',shirtColor);form.append('mockup',currentMockup);
   // Distort/Warp: send the corners/mesh in absolute source-pixel coordinates
@@ -1814,10 +1830,12 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
     const res=await fetch('/render',{method:'POST',body:form});
     if(res.status===401){openAuthModal('login');st.className='';st.textContent='';return;}
     if(res.status===402){openCabinet();st.className='';st.textContent='';return;}
+    if(res.status===429)throw new Error('Too many requests — please wait a moment and try again');
     if(!res.ok)throw new Error('Error '+res.status);
     const url=URL.createObjectURL(await res.blob());
     document.getElementById('resultImg').src=url;document.getElementById('resultImg').classList.add('show');
     document.getElementById('dlBtn').href=url;document.getElementById('dlBtn').classList.add('show');
+    if(currentUser&&currentUser.animate_available)document.getElementById('animateBtn').classList.add('show');
     st.className='status ok';st.textContent='✓ Done';
     // Update the "N free renders left" count right away rather than
     // leaving it showing what it was before this render.
@@ -1825,6 +1843,83 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   }catch(err){st.className='status err';st.textContent='✗ '+err.message;document.getElementById('resultPlaceholder').style.display='';}
   finally{document.getElementById('renderBtn').disabled=false;}
 });
+
+// ── "Oживить" — pay-per-use photo-to-video animation of the last render ───
+let animatePollTimer=null;
+function closeAnimateModal(){
+  document.getElementById('animateModal').classList.remove('show');
+  clearInterval(animatePollTimer);animatePollTimer=null;
+}
+document.getElementById('animateModalClose').addEventListener('click',closeAnimateModal);
+document.getElementById('animateModal').addEventListener('click',e=>{if(e.target.id==='animateModal')closeAnimateModal();});
+function resetAnimateBox(){
+  // Called when a fresh render starts, so a stale "Oживить" button from a
+  // previous render doesn't animate the wrong image.
+  document.getElementById('animateBtn').classList.remove('show');
+}
+document.getElementById('animateBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('animateBtn');
+  const resultImg=document.getElementById('resultImg');
+  if(!resultImg.src)return;
+  btn.disabled=true;btn.textContent='Starting checkout…';
+  try{
+    const blob=await fetch(resultImg.src).then(r=>r.blob());
+    const form=new FormData();form.append('file',blob,'mockup.png');
+    const res=await fetch('/api/animate/create',{method:'POST',body:form});
+    if(res.status===401){openAuthModal('login');return;}
+    const data=await res.json().catch(()=>({}));
+    if(!res.ok){alert(data.detail||'Could not start checkout — please try again');return;}
+    window.location.href=data.approve_url;
+  }catch(err){
+    alert('Network error — please try again');
+  }finally{
+    btn.disabled=false;btn.textContent='🎬 Oживить — $'+(currentUser?.animate_price_usd||'1.99');
+  }
+});
+
+async function pollAnimateStatus(jobId){
+  const statusText=document.getElementById('animateStatusText');
+  const video=document.getElementById('animateVideo');
+  const dl=document.getElementById('animateDlBtn');
+  video.classList.remove('show');video.removeAttribute('src');
+  dl.classList.remove('show');
+  statusText.className='status';
+  statusText.textContent='Generating your video — this can take a minute or two…';
+  document.getElementById('animateModal').classList.add('show');
+  const check=async()=>{
+    let data;
+    try{
+      const res=await fetch('/api/animate/status/'+jobId);
+      if(!res.ok)return; // transient — just try again next tick
+      data=await res.json();
+    }catch(err){return;}
+    if(data.status==='done'&&data.video_url){
+      clearInterval(animatePollTimer);animatePollTimer=null;
+      statusText.className='status ok';statusText.textContent='✓ Done';
+      video.src=data.video_url;video.classList.add('show');
+      dl.href=data.video_url;dl.classList.add('show');
+    }else if(data.status==='failed'){
+      clearInterval(animatePollTimer);animatePollTimer=null;
+      statusText.className='status err';
+      statusText.textContent='✗ '+(data.error||'Video generation failed — you have been refunded.');
+    }
+  };
+  check();
+  animatePollTimer=setInterval(check,4000);
+}
+
+// Handle the redirect back from PayPal after paying for an animation
+// (?animate=<job_id>|cancelled|error).
+(function handleAnimateReturn(){
+  const params=new URLSearchParams(window.location.search);
+  const result=params.get('animate');
+  if(!result)return;
+  window.history.replaceState(null,'',window.location.pathname);
+  if(result==='cancelled'||result==='error')return;
+  const jobId=parseInt(result,10);
+  if(!jobId)return;
+  pollAnimateStatus(jobId);
+})();
 </script>
 </body>
 </html>

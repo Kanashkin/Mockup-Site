@@ -1,4 +1,4 @@
-import io, os, json, datetime
+import io, os, json, datetime, secrets
 import numpy as np
 import cv2
 from PIL import Image
@@ -16,7 +16,8 @@ from slowapi.errors import RateLimitExceeded
 
 import paypal
 import google_oauth
-from db import init_db, get_db, User, Subscription
+import animate
+from db import init_db, get_db, User, Subscription, AnimationJob
 from auth import (
     hash_password, verify_password, validate_email, validate_password,
     create_user_session, clear_user_session, get_current_user, require_user,
@@ -46,6 +47,11 @@ app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "d
 # many high-res renders before /render starts requiring one (see render_mockup
 # and User.render_count in db.py).
 FREE_RENDER_LIMIT = int(os.environ.get("FREE_RENDER_LIMIT", "5"))
+
+# "Oживить" — pay-per-use photo-to-video animation of an already-rendered
+# mockup (see the /api/animate/* routes below and animate.py). Priced to
+# cover PiAPI/Kling's ~$0.50-1 cost per 5s clip plus PayPal fees & margin.
+ANIMATE_PRICE_USD = os.environ.get("ANIMATE_PRICE_USD", "1.99")
 
 def public_base_url(request: Request) -> str:
     """request.base_url reflects the scheme Railway's internal proxy used to
@@ -535,6 +541,8 @@ def me(request: Request, db: Session = Depends(get_db)):
         # (unlimited), but harmless to always send.
         "render_count": user.render_count,
         "free_render_limit": FREE_RENDER_LIMIT,
+        "animate_price_usd": ANIMATE_PRICE_USD,
+        "animate_available": paypal.configured() and animate.configured(),
     }
 
 
@@ -616,6 +624,155 @@ async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
         sub.status = "active"
     db.commit()
     return {"ok": True}
+
+
+# ── "Oживить" — photo-to-video animation (pay-per-use) ──────────────────
+@app.post("/api/animate/create")
+@limiter.limit("10/hour")
+async def animate_create(
+    request: Request,
+    file: UploadFile = File(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    """Starts checkout for animating an already-rendered mockup image. The
+    client posts the exact PNG it already has (the /render result) — we
+    don't re-render anything here, just hold onto those bytes long enough
+    to hand them to PiAPI once payment clears (see animate_return below)."""
+    if not paypal.configured():
+        raise HTTPException(503, "Payments are not configured yet")
+    if not animate.configured():
+        raise HTTPException(503, "Photo animation is not configured yet")
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(400, "File must be an image")
+    data = await file.read()
+    if len(data) > 20 * 1024 * 1024:
+        raise HTTPException(400, "File too large")
+
+    job = AnimationJob(
+        user_id=user.id,
+        status="pending_payment",
+        image_token=secrets.token_urlsafe(24),
+        image_data=data,
+        image_content_type=file.content_type,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    base = public_base_url(request)
+    try:
+        result = paypal.create_order(
+            amount_usd=ANIMATE_PRICE_USD,
+            custom_id=str(job.id),
+            return_url=f"{base}/api/animate/return",
+            cancel_url=f"{base}/?animate=cancelled",
+            description="Photo animation (Oживить) — 5s AI video",
+        )
+    except Exception:
+        db.delete(job)
+        db.commit()
+        raise HTTPException(502, "Could not start checkout — please try again")
+    job.paypal_order_id = result["id"]
+    db.commit()
+    return {"approve_url": result["approve_url"]}
+
+
+@app.get("/api/animate/image/{token}")
+def animate_image(token: str, db: Session = Depends(get_db)):
+    """Serves the source image for one animation job at a public URL — PiAPI
+    fetches this URL itself (their API takes an image_url, not raw upload
+    bytes), so this has to be reachable without auth. token is a random
+    per-job value (not the row id) so jobs aren't enumerable by guessing."""
+    job = db.query(AnimationJob).filter(AnimationJob.image_token == token).first()
+    if not job or not job.image_data:
+        raise HTTPException(404, "Not found")
+    return Response(content=job.image_data, media_type=job.image_content_type or "image/png")
+
+
+@app.get("/api/animate/return")
+def animate_return(token: str, request: Request, db: Session = Depends(get_db)):
+    """PayPal redirects the browser here after the user approves the
+    one-time payment on PayPal's site (token = the PayPal order id, per
+    PayPal's own redirect convention for the Orders v2 API)."""
+    job = db.query(AnimationJob).filter(AnimationJob.paypal_order_id == token).first()
+    if not job:
+        return RedirectResponse("/?animate=error")
+    if job.status != "pending_payment":
+        # Already captured (e.g. user hit back/refresh on this page) — just
+        # send them back to watch the existing job's progress.
+        return RedirectResponse(f"/?animate={job.id}")
+
+    try:
+        capture = paypal.capture_order(token)
+    except Exception:
+        job.status = "failed"
+        job.error_message = "Payment capture failed"
+        db.commit()
+        return RedirectResponse(f"/?animate={job.id}")
+
+    if capture.get("status") != "COMPLETED":
+        job.status = "failed"
+        job.error_message = "Payment was not completed"
+        db.commit()
+        return RedirectResponse(f"/?animate={job.id}")
+
+    capture_id = None
+    try:
+        capture_id = capture["purchase_units"][0]["payments"]["captures"][0]["id"]
+    except (KeyError, IndexError):
+        pass
+    job.status = "paid"
+    job.paypal_capture_id = capture_id
+    db.commit()
+
+    base = public_base_url(request)
+    try:
+        image_url = f"{base}/api/animate/image/{job.image_token}"
+        task_id = animate.submit_animation(image_url)
+        job.external_task_id = task_id
+        job.status = "processing"
+        db.commit()
+    except Exception as e:
+        job.status = "failed"
+        job.error_message = "Video generation could not start"
+        db.commit()
+        if capture_id:
+            try:
+                paypal.refund_capture(capture_id, reason="Video generation could not start")
+            except Exception:
+                pass  # best-effort — doesn't block returning the (failed) job to the user
+
+    return RedirectResponse(f"/?animate={job.id}")
+
+
+@app.get("/api/animate/status/{job_id}")
+def animate_status(job_id: int, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    job = db.query(AnimationJob).filter(AnimationJob.id == job_id, AnimationJob.user_id == user.id).first()
+    if not job:
+        raise HTTPException(404, "Not found")
+    if job.status == "processing" and job.external_task_id:
+        try:
+            result = animate.get_task(job.external_task_id)
+        except Exception:
+            result = None
+        if result:
+            if result["status"] == "completed" and result["video_url"]:
+                job.status = "done"
+                job.video_url = result["video_url"]
+                job.image_data = None  # no longer needed once PiAPI has finished with it
+                db.commit()
+            elif result["status"] == "failed":
+                job.status = "failed"
+                job.error_message = result["error"] or "Video generation failed"
+                job.image_data = None
+                db.commit()
+                if job.paypal_capture_id:
+                    try:
+                        paypal.refund_capture(job.paypal_capture_id, reason="Video generation failed")
+                    except Exception:
+                        pass
+    return {"status": job.status, "video_url": job.video_url, "error": job.error_message}
 
 
 @app.post("/render")

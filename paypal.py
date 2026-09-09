@@ -128,6 +128,66 @@ def cancel_subscription(subscription_id: str, reason: str = "User requested canc
         resp.raise_for_status()
 
 
+def create_order(amount_usd: str, custom_id: str, return_url: str, cancel_url: str, description: str = "") -> dict:
+    """One-time payment (PayPal Orders v2 API), separate from the recurring
+    Subscriptions v1 API above — used for pay-per-use features (e.g. photo
+    animation) rather than the monthly plan. Returns the order id plus the
+    "approve" URL the user must be redirected to."""
+    resp = httpx.post(
+        f"{BASE_URL}/v2/checkout/orders",
+        headers=_auth_headers(),
+        json={
+            "intent": "CAPTURE",
+            "purchase_units": [{
+                "custom_id": custom_id,
+                "description": description,
+                "amount": {"currency_code": "USD", "value": amount_usd},
+            }],
+            "application_context": {
+                "return_url": return_url,
+                "cancel_url": cancel_url,
+                "user_action": "PAY_NOW",
+                "brand_name": "T-Shirt Mockup",
+            },
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    approve_url = next((l["href"] for l in data["links"] if l["rel"] == "approve"), None)
+    return {"id": data["id"], "approve_url": approve_url, "status": data["status"]}
+
+
+def capture_order(order_id: str) -> dict:
+    """Captures a previously-approved one-time order (call after the user
+    returns from PayPal's approve_url). Raises on a genuine HTTP/API error;
+    check the returned dict's "status" for the payment outcome (normally
+    "COMPLETED") since PayPal returns 201/200 for both success and some
+    declined cases."""
+    resp = httpx.post(
+        f"{BASE_URL}/v2/checkout/orders/{order_id}/capture",
+        headers=_auth_headers(),
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def refund_capture(capture_id: str, reason: str = "") -> dict:
+    """Refunds a completed capture in full. Used when a payment succeeds but
+    we then fail to actually deliver the paid-for result (e.g. the video
+    generation API errors out) — the user shouldn't be charged for a feature
+    that didn't work."""
+    resp = httpx.post(
+        f"{BASE_URL}/v2/payments/captures/{capture_id}/refund",
+        headers=_auth_headers(),
+        json={"note_to_payer": reason} if reason else {},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
 def verify_webhook_signature(headers: dict, body: bytes) -> bool:
     """Confirms a webhook actually came from PayPal (not a forged POST from
     anywhere on the internet) before we trust it to change a user's

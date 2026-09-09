@@ -7,7 +7,7 @@ development, so the app runs without any DB configured at all.
 import os
 import datetime
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean, text, inspect
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean, LargeBinary, text, inspect
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./mockup_site.db")
@@ -60,6 +60,37 @@ class Subscription(Base):
 
     def is_active(self):
         return self.status == "active"
+
+
+class AnimationJob(Base):
+    """One paid "Oживить" (photo -> short AI video) request. Tracks a single
+    request from checkout through the async Kling (via PiAPI) generation.
+
+    Lifecycle: pending_payment -> paid -> processing -> done|failed.
+    image_data holds the rendered PNG just long enough to be served back to
+    PiAPI at a public URL (see /api/animate/image/<id> in server.py) — it's
+    cleared once the job reaches done/failed so finished jobs don't bloat
+    the database with image bytes nobody needs anymore.
+    """
+    __tablename__ = "animation_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(String, default="pending_payment", nullable=False)
+    # Random token (not the row id) used in the public image URL so a paid
+    # job's source image isn't trivially enumerable by guessing small ints.
+    image_token = Column(String, unique=True, index=True, nullable=False)
+    image_data = Column(LargeBinary, nullable=True)
+    image_content_type = Column(String, nullable=True)
+    paypal_order_id = Column(String, unique=True, nullable=True)
+    paypal_capture_id = Column(String, nullable=True)
+    external_task_id = Column(String, nullable=True)
+    video_url = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    user = relationship("User")
 
 
 def init_db():
