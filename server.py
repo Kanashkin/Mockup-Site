@@ -26,6 +26,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # every deploy) if someone forgets to set it; never rely on it in production.
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "dev-insecure-secret-key"))
 
+# Free tier: a logged-in account without an active subscription gets this
+# many high-res renders before /render starts requiring one (see render_mockup
+# and User.render_count in db.py).
+FREE_RENDER_LIMIT = int(os.environ.get("FREE_RENDER_LIMIT", "10"))
+
 def public_base_url(request: Request) -> str:
     """request.base_url reflects the scheme Railway's internal proxy used to
     reach this process, which is plain http even though the site is only
@@ -508,6 +513,10 @@ def me(request: Request, db: Session = Depends(get_db)):
             "status": sub.status if sub else "none",
             "current_period_end": sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
         },
+        # Free-tier usage — meaningless once subscription.status is "active"
+        # (unlimited), but harmless to always send.
+        "render_count": user.render_count,
+        "free_render_limit": FREE_RENDER_LIMIT,
     }
 
 
@@ -605,15 +614,17 @@ async def render_mockup(
     # MockupEngine.render / _build_src_canvas_distort / _build_src_canvas_warp.
     distort_corners: str = Form(None),
     warp_mesh: str = Form(None),
-    # TEMP: login requirement disabled for testing — re-enable before launch
-    # user: User = Depends(require_user),
-    user: User | None = Depends(get_current_user),
+    user: User = Depends(require_user),
     db: Session = Depends(get_db),
 ):
-    # TEMP: subscription check disabled for testing — re-enable before launch
-    # sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
-    # if not sub or not sub.is_active():
-    #     raise HTTPException(402, "Active subscription required to generate high-res downloads")
+    # Free tier: FREE_RENDER_LIMIT renders per account before a subscription
+    # is required. Checked (not just incremented) up front so a user who's
+    # already over the limit gets a fast 402 instead of paying the cost of a
+    # render that would've been thrown away anyway.
+    sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
+    has_active_sub = bool(sub and sub.is_active())
+    if not has_active_sub and user.render_count >= FREE_RENDER_LIMIT:
+        raise HTTPException(402, f"Free limit of {FREE_RENDER_LIMIT} renders reached — subscribe for unlimited high-res downloads")
     engine = get_engine(mockup) or get_engine(MOCKUP_NAMES[0])
     if not file.content_type.startswith("image/"):
         raise HTTPException(400,"File must be an image")
@@ -647,6 +658,12 @@ async def render_mockup(
 
     result = engine.render(design,x=x,y=y,w=w,h=h,color=color,
                             distort_corners=parsed_corners,warp_mesh=parsed_mesh)
+    if not has_active_sub:
+        # Only counts against the free-tier quota once the render actually
+        # succeeded — a bad upload or bad distort/warp payload above already
+        # returned a 400 without reaching here.
+        user.render_count += 1
+        db.commit()
     buf = io.BytesIO()
     result.save(buf,format="PNG",optimize=True)
     buf.seek(0)

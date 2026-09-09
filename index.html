@@ -137,6 +137,7 @@
   </span>
   <span id="authUser" style="display:none">
     <span id="userEmail"></span>
+    <span id="renderQuota" class="hint" style="margin:0 8px"></span>
     <button class="auth-link" id="cabinetLink">Cabinet</button>
     <button class="auth-link" id="logoutLink">Log out</button>
   </span>
@@ -884,6 +885,13 @@ async function refreshAuthUI(){
   if(currentUser.logged_in){
     guest.style.display='none';userEl.style.display='inline-flex';
     document.getElementById('userEmail').textContent=currentUser.email;
+    const q=document.getElementById('renderQuota');
+    if(currentUser.subscription.status==='active'){
+      q.textContent='';
+    }else{
+      const left=Math.max(0,currentUser.free_render_limit-currentUser.render_count);
+      q.textContent='· '+left+' free render'+(left===1?'':'s')+' left';
+    }
   }else{
     guest.style.display='inline-flex';userEl.style.display='none';
   }
@@ -950,7 +958,11 @@ function renderCabinet(){
     if(until)html+='<div class="plan-row"><span>Renews</span><span>'+until+'</span></div>';
     html+='<button class="btn2" id="cancelSubBtn" style="margin-top:14px">Cancel subscription</button>';
   }else{
-    html+='<p class="hint" style="margin:12px 0">Subscribe to unlock high-res downloads for all mockups.</p>';
+    const left=Math.max(0,currentUser.free_render_limit-currentUser.render_count);
+    html+='<div class="plan-row"><span>Free renders</span><span>'+left+' of '+currentUser.free_render_limit+' left</span></div>';
+    html+='<p class="hint" style="margin:12px 0">'+(left>0
+      ?'Subscribe any time to skip the free-render limit and unlock unlimited high-res downloads.'
+      :'You\'ve used all your free renders. Subscribe to keep generating high-res downloads.')+'</p>';
     html+='<button class="btn" id="subscribeBtn">Subscribe — $9.99/mo →</button>';
   }
   html+='<div class="status" id="cabinetStatus"></div>';
@@ -1770,10 +1782,12 @@ document.getElementById('redoBtn').addEventListener('click',()=>{
 document.getElementById('renderBtn').addEventListener('click',async()=>{
   if(!file)return;
   await refreshAuthUI();
-  // TEMP: login gate disabled for testing — re-enable before launch
-  // if(!currentUser.logged_in){openAuthModal('login');return;}
-  // TEMP: subscription gate disabled for testing — re-enable before launch
-  // if(currentUser.subscription.status!=='active'){openCabinet();return;}
+  if(!currentUser.logged_in){openAuthModal('signup');return;}
+  // No subscription gate here on purpose — logged-in accounts get
+  // FREE_RENDER_LIMIT renders for free (see server.py). The server enforces
+  // the actual cutoff and responds 402 once it's used up, which the fetch
+  // handler below already turns into openCabinet() — same path a hard
+  // subscription requirement would use, just later.
   document.getElementById('renderBtn').disabled=true;
   document.getElementById('resultCard').style.display='';
   const st=document.getElementById('status');
@@ -1805,6 +1819,9 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
     document.getElementById('resultImg').src=url;document.getElementById('resultImg').classList.add('show');
     document.getElementById('dlBtn').href=url;document.getElementById('dlBtn').classList.add('show');
     st.className='status ok';st.textContent='✓ Done';
+    // Update the "N free renders left" count right away rather than
+    // leaving it showing what it was before this render.
+    refreshAuthUI();
   }catch(err){st.className='status err';st.textContent='✗ '+err.message;document.getElementById('resultPlaceholder').style.display='';}
   finally{document.getElementById('renderBtn').disabled=false;}
 });

@@ -32,6 +32,11 @@ class User(Base):
     # Set for accounts created (or linked) via "Continue with Google".
     google_id = Column(String, unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    # Free-tier usage counter (see FREE_RENDER_LIMIT in server.py) — how many
+    # /render calls this account has made without an active subscription.
+    # Only ever read/incremented for non-subscribed accounts; irrelevant
+    # (and left as-is) once a subscription is active.
+    render_count = Column(Integer, default=0, nullable=False)
 
     subscription = relationship("Subscription", back_populates="user", uselist=False)
 
@@ -60,6 +65,7 @@ class Subscription(Base):
 def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_google_login()
+    _migrate_render_count()
 
 
 def _migrate_google_login():
@@ -86,6 +92,18 @@ def _migrate_google_login():
                 # only matters for local dev (production is Postgres), it's
                 # simplest to leave it — local dev DBs are disposable.
                 pass
+
+
+def _migrate_render_count():
+    """Adds the render_count column (free-tier usage counter) to an existing
+    'users' table that predates it. No-op on a fresh database."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+    columns = {c["name"] for c in inspector.get_columns("users")}
+    if "render_count" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN render_count INTEGER NOT NULL DEFAULT 0"))
 
 
 def get_db():
