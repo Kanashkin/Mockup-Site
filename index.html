@@ -303,19 +303,17 @@ let mockupDefaultPos={cx:0.5,cy:0.48,size:0.35,rot:0};
 let handles=null;
 
 // ── Distort / Warp trial (real-site version of the standalone prototype) ──
-// Alternative placement tools alongside the plain resize/rotate box. 'warp'
-// is now the DEFAULT mode every mockup starts in (see loadMockupAssets and
-// the resetBtn handler) — a 4x4 grid of control points evaluated as a
-// cubic-Bezier surface (a smooth mesh warp — see server.py's
-// _build_src_canvas_warp), seeded from the plain box's position so it looks
-// identical until a point is actually dragged. 'distort' is the other
-// option, reachable via its toggle button: drag any of 4 independent
-// corners (a single perspective warp — see _build_src_canvas_distort). The
-// plain axis-aligned box (distortMode=null, driven by pos.{cx,cy,size,rot})
-// is still reachable by clicking the active toggle button off. All three
-// are stored in the same (u,v) source-fraction space as pos.cx/cy
-// (fractions of SRC_W/SRC_H) and kept in sync via quadLastEdited so
-// switching between them never resets what the user already did.
+// Optional alternative placement tools, opt-in via the two toggle buttons
+// above the sliders. Off (distortMode=null) behaves exactly as before: an
+// axis-aligned box driven by pos.{cx,cy,size,rot}. 'distort' lets the user
+// drag any of 4 independent corners (a single perspective warp of the
+// design — see server.py's _build_src_canvas_distort). 'warp' exposes a 4x4
+// grid of control points evaluated as a cubic-Bezier surface (a smooth mesh
+// warp — see _build_src_canvas_warp). Both are stored in the same (u,v)
+// source-fraction space as pos.cx/cy (fractions of SRC_W/SRC_H), seeded
+// from the current pos the first time a tool is used, and kept in sync via
+// quadLastEdited so switching tools — or back to the plain box — never
+// resets what the user already did.
 let distortMode=null; // null | 'distort' | 'warp'
 let quadCorners=null; // [{u,v}x4] TL,TR,BR,BL
 let meshPoints=null;  // [{u,v}x16] row-major 4x4 (row0=top edge, row3=bottom edge)
@@ -491,17 +489,12 @@ function loadMockupAssets(name,resetPosition){
     }:{cx:0.5,cy:0.48,size:0.35,rot:0};
     if(resetPosition){
       Object.assign(pos,mockupDefaultPos);
-      // A new photo means a different print zone — any previous Distort/Warp
-      // shape was fitted to the old one, so it's rebuilt fresh here rather
-      // than carried over. Warp is the default placement mode (not an
-      // opt-in extra) — start every mockup with a 4x4 mesh seeded from this
-      // mockup's own print-zone box, so it looks exactly like the plain box
-      // until the user actually drags a point.
-      quadCorners=cornersFromPos();
-      meshPoints=meshFromCornersArr(quadCorners);
-      distortMode='warp';quadLastEdited='mesh';
-      toolDistortBtn.classList.remove('active');toolWarpBtn.classList.add('active');
-      posSlidersEl.style.display='none';distortHintEl.style.display='';distortIntroHintEl.style.display='none';
+      // A new photo means a different print zone — the Distort/Warp shape
+      // (if any) was fitted to the old one, so it goes back to off rather
+      // than carrying over a shape that no longer matches.
+      distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
+      toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
+      posSlidersEl.style.display='';distortHintEl.style.display='none';distortIntroHintEl.style.display='';
       syncSliders();
       resetHistory();
     }
@@ -1581,13 +1574,9 @@ toolWarpBtn.addEventListener('click',()=>setDistortMode('warp'));
 
 document.getElementById('resetBtn').addEventListener('click',()=>{
   Object.assign(pos,mockupDefaultPos);
-  // Reset goes back to the same warp-mesh default every mockup starts
-  // with, not to the old plain box — see loadMockupAssets.
-  quadCorners=cornersFromPos();
-  meshPoints=meshFromCornersArr(quadCorners);
-  distortMode='warp';quadLastEdited='mesh';
-  toolDistortBtn.classList.remove('active');toolWarpBtn.classList.add('active');
-  posSlidersEl.style.display='none';distortHintEl.style.display='';distortIntroHintEl.style.display='none';
+  distortMode=null;quadCorners=null;meshPoints=null;quadLastEdited='corners';
+  toolDistortBtn.classList.remove('active');toolWarpBtn.classList.remove('active');
+  posSlidersEl.style.display='';distortHintEl.style.display='none';distortIntroHintEl.style.display='';
   syncSliders();drawPreview();pushHistory();
 });
 
