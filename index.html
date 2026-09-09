@@ -1005,7 +1005,7 @@ async function cancelSubscription(){
   const params=new URLSearchParams(window.location.search);
   const result=params.get('subscribe');
   if(!result)return;
-  history.replaceState(null,'',window.location.pathname);
+  window.history.replaceState(null,'',window.location.pathname);
   refreshAuthUI().then(()=>{
     openCabinet();
     const st=document.getElementById('cabinetStatus');
@@ -1026,7 +1026,7 @@ async function cancelSubscription(){
   const params=new URLSearchParams(window.location.search);
   const result=params.get('auth');
   if(!result)return;
-  history.replaceState(null,'',window.location.pathname);
+  window.history.replaceState(null,'',window.location.pathname);
   refreshAuthUI().then(()=>{
     if(result==='error'){
       openAuthModal('login');
