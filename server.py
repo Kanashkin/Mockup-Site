@@ -868,4 +868,30 @@ async def render_mockup(
 def health():
     return {"status":"ok","mockups":MOCKUP_NAMES}
 
+# Privacy-friendly analytics (Umami): off by default, no-op until both env
+# vars below are set, so nothing breaks or reports anything before then.
+# Sign up at https://umami.is (free tier: 100k events/mo, no cookie banner
+# needed since it doesn't use cookies or collect personal data), add a
+# website, and copy the tracking snippet it gives you into these two vars
+# on Railway: UMAMI_SCRIPT_URL is the snippet's src="..." value,
+# UMAMI_WEBSITE_ID is its data-website-id="..." value. Served from our own
+# route (rather than hardcoding Umami's URL into index.html) so the exact
+# collector domain/self-hosting choice never needs a code change.
+UMAMI_SCRIPT_URL = os.environ.get("UMAMI_SCRIPT_URL")
+UMAMI_WEBSITE_ID = os.environ.get("UMAMI_WEBSITE_ID")
+
+@app.get("/analytics.js")
+def analytics_js():
+    if not (UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID):
+        js = "// analytics not configured -- set UMAMI_SCRIPT_URL and UMAMI_WEBSITE_ID"
+    else:
+        js = (
+            "(function(){var s=document.createElement('script');"
+            f"s.defer=true;s.src={json.dumps(UMAMI_SCRIPT_URL)};"
+            f"s.setAttribute('data-website-id',{json.dumps(UMAMI_WEBSITE_ID)});"
+            "document.head.appendChild(s);})();"
+        )
+    return Response(content=js, media_type="application/javascript",
+                    headers={"Cache-Control": "no-store"})
+
 app.mount("/",StaticFiles(directory=BASE_DIR,html=True),name="static")
