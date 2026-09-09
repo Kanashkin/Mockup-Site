@@ -10,6 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 import paypal
 import google_oauth
@@ -21,6 +24,19 @@ from auth import (
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Per-IP request throttling (CORS above is wide open by design — anyone can
+# call the API from any origin — so this is the only thing standing between
+# a single client and e.g. hammering /render or mass-creating accounts).
+# Keyed by remote address, not by account, since accounts are free to create.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+def _rate_limit_json(request: Request, exc: RateLimitExceeded):
+    # Match the {"detail": ...} shape HTTPException already uses everywhere
+    # else in this app, so the existing frontend error handling (which reads
+    # data.detail) shows a sensible message instead of a raw slowapi one.
+    return JSONResponse(status_code=429, content={"detail": "Too many requests — please slow down and try again shortly."})
+app.add_exception_handler(RateLimitExceeded, _rate_limit_json)
 # SECRET_KEY signs the session cookie — set a real random value on Railway.
 # The fallback below is only so the app still boots (with sessions reset
 # every deploy) if someone forgets to set it; never rely on it in production.
@@ -423,6 +439,7 @@ def get_engine(name):
 
 # ── Auth ─────────────────────────────────────────────────────────────────
 @app.post("/api/register")
+@limiter.limit("10/hour")
 def register(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     email = validate_email(email)
     validate_password(password)
@@ -437,6 +454,7 @@ def register(request: Request, email: str = Form(...), password: str = Form(...)
 
 
 @app.post("/api/login")
+@limiter.limit("20/minute")
 def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     email = validate_email(email)
     user = db.query(User).filter(User.email == email).first()
@@ -601,7 +619,9 @@ async def paypal_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @app.post("/render")
+@limiter.limit("15/minute")
 async def render_mockup(
+    request: Request,
     file: UploadFile = File(...),
     x: int = Form(0), y: int = Form(0),
     w: int = Form(None), h: int = Form(None),
