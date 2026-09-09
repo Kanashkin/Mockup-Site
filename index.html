@@ -19,7 +19,26 @@
   <meta name="twitter:title" content="Freeman Studio Mockup Generator — Realistic Apparel Mockups in Seconds">
   <meta name="twitter:description" content="Upload your design and get a realistic, high-resolution t-shirt mockup in seconds — no Photoshop needed. Try 5 renders free.">
   <meta name="twitter:image" content="https://mockup-site-production.up.railway.app/shirt_preview.png">
+  <meta name="robots" content="index, follow">
   <script defer src="/analytics.js"></script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Freeman Studio Mockup Generator",
+    "url": "https://mockup-site-production.up.railway.app/",
+    "description": "Upload your design and get a realistic, high-resolution t-shirt mockup in seconds — no Photoshop needed.",
+    "applicationCategory": "DesignApplication",
+    "operatingSystem": "Any (web-based)",
+    "image": "https://mockup-site-production.up.railway.app/shirt_preview.png",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "description": "5 free mockup renders, no card required"
+    }
+  }
+  </script>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{--bg:#0f0f0f;--surface:#1a1a1a;--border:#2a2a2a;--accent:#e93323;--text:#f0f0f0;--muted:#555}
@@ -52,6 +71,7 @@
     .beta-banner a{color:var(--accent)}
     .beta-banner a:hover{color:#ff5544}
     .beta-badge{flex-shrink:0;background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.05em;padding:4px 9px;border-radius:20px;text-transform:uppercase}
+    .page-title{font-size:13px;font-weight:600;color:var(--muted);text-align:center;letter-spacing:.2px;margin:8px 0 0;max-width:1060px}
     .flyout{position:absolute;top:0;left:0;width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.4);display:none;box-sizing:border-box}
     .flyout.show{display:block}
     .result-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:50px 12px;line-height:1.6}
@@ -193,6 +213,8 @@
     <a class="dl" id="animateDlBtn" target="_blank" rel="noopener" style="margin-top:10px">↓ Download video</a>
   </div>
 </div>
+
+<h1 class="page-title">Freeman Studio Mockup Generator — Realistic Apparel Mockups in Seconds</h1>
 
 <div class="beta-banner" id="betaBanner">
   <span class="beta-badge">Beta</span>
