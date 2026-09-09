@@ -23,6 +23,23 @@ from auth import (
     create_user_session, clear_user_session, get_current_user, require_user,
 )
 
+# Error monitoring: reports unhandled exceptions (and, at a low sample rate,
+# performance traces) to Sentry so problems in production surface as alerts
+# instead of only being noticed if a user reports them or someone happens to
+# check the Railway logs. Off by default (no-op) until SENTRY_DSN is set —
+# sign up at https://sentry.io, create a Python/FastAPI project, and add its
+# DSN to Railway. request bodies/headers are not sent (send_default_pii=False)
+# to avoid leaking passwords/tokens into Sentry.
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=os.environ.get("RAILWAY_ENVIRONMENT_NAME", "production"),
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.05")),
+        send_default_pii=False,
+    )
+
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
