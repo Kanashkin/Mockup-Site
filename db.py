@@ -93,6 +93,22 @@ class AnimationJob(Base):
     user = relationship("User")
 
 
+class RenderEvent(Base):
+    """One successful /render call — logged for usage stats (see
+    /api/admin/stats in server.py). Deliberately minimal: no image data, just
+    enough to answer "how much / what / by whom" without storing anything
+    sensitive. user_id is nullable so this survives a user being deleted
+    later without needing cascade logic."""
+    __tablename__ = "render_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    mockup = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    user = relationship("User")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate_google_login()

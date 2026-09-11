@@ -17,7 +17,7 @@ from slowapi.errors import RateLimitExceeded
 import paypal
 import google_oauth
 import animate
-from db import init_db, get_db, User, Subscription, AnimationJob
+from db import init_db, get_db, User, Subscription, AnimationJob, RenderEvent
 from auth import (
     hash_password, verify_password, validate_email, validate_password,
     create_user_session, clear_user_session, get_current_user, require_user,
@@ -852,12 +852,16 @@ async def render_mockup(
 
     result = engine.render(design,x=x,y=y,w=w,h=h,color=color,
                             distort_corners=parsed_corners,warp_mesh=parsed_mesh)
+    # Logged for every successful render (subscribed or free tier) so usage
+    # stats reflect real activity, not just free-tier consumption — see
+    # /api/admin/stats below.
+    db.add(RenderEvent(user_id=user.id, mockup=mockup))
     if not has_active_sub:
         # Only counts against the free-tier quota once the render actually
         # succeeded — a bad upload or bad distort/warp payload above already
         # returned a 400 without reaching here.
         user.render_count += 1
-        db.commit()
+    db.commit()
     buf = io.BytesIO()
     result.save(buf,format="PNG",optimize=True)
     buf.seek(0)
@@ -893,5 +897,68 @@ def analytics_js():
         )
     return Response(content=js, media_type="application/javascript",
                     headers={"Cache-Control": "no-store"})
+
+# Internal usage dashboard (who's generating, how much, which mockups) —
+# separate from Umami above, which covers page-view/visitor behavior. Not a
+# real admin-role system (there isn't one), just a shared-secret query param
+# so /admin_stats.html (see that file) has something to check before showing
+# numbers. Set ADMIN_STATS_KEY on Railway to any random string to enable it;
+# unset, the endpoint 404s as if it didn't exist rather than revealing itself
+# with a 401/403.
+ADMIN_STATS_KEY = os.environ.get("ADMIN_STATS_KEY")
+
+@app.get("/api/admin/stats")
+def admin_stats(key: str = "", db: Session = Depends(get_db)):
+    if not ADMIN_STATS_KEY or not secrets.compare_digest(key, ADMIN_STATS_KEY):
+        raise HTTPException(404)
+    from sqlalchemy import func
+
+    now = datetime.datetime.utcnow()
+    since = lambda days: now - datetime.timedelta(days=days)
+
+    def render_count_since(days):
+        return db.query(RenderEvent).filter(RenderEvent.created_at >= since(days)).count()
+
+    top_mockups = (
+        db.query(RenderEvent.mockup, func.count(RenderEvent.id))
+        .filter(RenderEvent.created_at >= since(30))
+        .group_by(RenderEvent.mockup)
+        .order_by(func.count(RenderEvent.id).desc())
+        .limit(20)
+        .all()
+    )
+    per_day = (
+        db.query(func.date(RenderEvent.created_at), func.count(RenderEvent.id))
+        .filter(RenderEvent.created_at >= since(30))
+        .group_by(func.date(RenderEvent.created_at))
+        .order_by(func.date(RenderEvent.created_at))
+        .all()
+    )
+    top_users = (
+        db.query(User.email, func.count(RenderEvent.id))
+        .join(RenderEvent, RenderEvent.user_id == User.id)
+        .filter(RenderEvent.created_at >= since(30))
+        .group_by(User.email)
+        .order_by(func.count(RenderEvent.id).desc())
+        .limit(20)
+        .all()
+    )
+
+    return {
+        "generated_at": now.isoformat() + "Z",
+        "totals": {
+            "renders_all_time": db.query(RenderEvent).count(),
+            "renders_24h": render_count_since(1),
+            "renders_7d": render_count_since(7),
+            "renders_30d": render_count_since(30),
+            "users_total": db.query(User).count(),
+            "users_new_7d": db.query(User).filter(User.created_at >= since(7)).count(),
+            "users_new_30d": db.query(User).filter(User.created_at >= since(30)).count(),
+            "active_subscriptions": db.query(Subscription).filter(Subscription.status == "active").count(),
+        },
+        "top_mockups_30d": [{"mockup": m, "count": n} for m, n in top_mockups],
+        "renders_per_day_30d": [{"day": str(d), "count": n} for d, n in per_day],
+        "top_users_30d": [{"email": e, "count": n} for e, n in top_users],
+    }
 
 app.mount("/",StaticFiles(directory=BASE_DIR,html=True),name="static")

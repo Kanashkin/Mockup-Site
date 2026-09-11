@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Статистика — Mockup Site</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --border:#242a38; --text:#e8ebf3; --muted:#8892a6;
+    --accent:#6d8dff; --accent2:#33d6a6; --warn:#ffb454; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:24px 16px 60px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+  .gate{max-width:360px;margin:80px auto;text-align:center}
+  .gate input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-size:14px;margin:12px 0}
+  .gate button{width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:14px;cursor:pointer}
+  .gate button:hover{opacity:.9}
+  .err{color:var(--bad);font-size:13px;margin-top:8px;min-height:18px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:28px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .card .n{font-size:26px;font-weight:700}
+  .card .l{color:var(--muted);font-size:12px;margin-top:2px}
+  section{margin-bottom:32px}
+  section h2{font-size:15px;margin:0 0 12px;color:var(--text)}
+  .bars{display:flex;align-items:flex-end;gap:3px;height:120px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .bar{flex:1;background:var(--accent);border-radius:2px 2px 0 0;min-height:2px;position:relative}
+  .bar:hover{background:var(--accent2)}
+  .bar .tip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#000;color:#fff;padding:3px 6px;border-radius:4px;font-size:11px;white-space:nowrap;margin-bottom:4px}
+  .bar:hover .tip{display:block}
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+  tr:last-child td{border-bottom:none}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .empty{color:var(--muted);font-size:13px;padding:16px;text-align:center}
+  .refresh{color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  #app{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="gate" id="gate">
+    <h1>Статистика</h1>
+    <div class="sub">Введи ключ доступа</div>
+    <input type="password" id="keyInput" placeholder="ADMIN_STATS_KEY" autocomplete="off">
+    <button onclick="load()">Показать</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="app">
+    <h1>Статистика Mockup Site</h1>
+    <div class="sub">Обновлено: <span id="genAt">—</span> · <span class="refresh" onclick="load(true)">обновить</span></div>
+
+    <div class="cards" id="cards"></div>
+
+    <section>
+      <h2>Рендеров в день (30 дней)</h2>
+      <div class="bars" id="perDay"></div>
+    </section>
+
+    <section>
+      <h2>Топ мокапов (30 дней)</h2>
+      <div id="topMockups"></div>
+    </section>
+
+    <section>
+      <h2>Топ по пользователям (30 дней)</h2>
+      <div id="topUsers"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+function getKey(){ return localStorage.getItem('admin_stats_key') || ''; }
+function setKey(k){ try{ localStorage.setItem('admin_stats_key', k); }catch(e){} }
+
+function fmt(n){ return n.toLocaleString('ru-RU'); }
+
+function renderCards(t){
+  const items = [
+    [t.renders_all_time, 'рендеров всего'],
+    [t.renders_24h, 'за 24 часа'],
+    [t.renders_7d, 'за 7 дней'],
+    [t.renders_30d, 'за 30 дней'],
+    [t.users_total, 'пользователей всего'],
+    [t.users_new_7d, 'новых за 7 дней'],
+    [t.active_subscriptions, 'активных подписок'],
+  ];
+  document.getElementById('cards').innerHTML = items.map(([n,l]) =>
+    `<div class="card"><div class="n">${fmt(n)}</div><div class="l">${l}</div></div>`
+  ).join('');
+}
+
+function renderPerDay(rows){
+  const el = document.getElementById('perDay');
+  if(!rows.length){ el.outerHTML = '<div class="empty">Пока нет данных</div>'; return; }
+  const max = Math.max(...rows.map(r => r.count), 1);
+  el.innerHTML = rows.map(r => {
+    const h = Math.max(2, Math.round(r.count / max * 100));
+    const day = r.day.slice(5); // MM-DD
+    return `<div class="bar" style="height:${h}%"><span class="tip">${day}: ${r.count}</span></div>`;
+  }).join('');
+}
+
+function renderTable(containerId, rows, cols){
+  const el = document.getElementById(containerId);
+  if(!rows.length){ el.innerHTML = '<div class="empty">Пока нет данных</div>'; return; }
+  const head = cols.map(c => `<th>${c.label}</th>`).join('');
+  const body = rows.map(r => '<tr>' + cols.map(c =>
+    `<td class="${c.num ? 'num' : ''}">${c.num ? fmt(r[c.key]) : r[c.key]}</td>`
+  ).join('') + '</tr>').join('');
+  el.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function load(forceKey){
+  const err = document.getElementById('err');
+  err.textContent = '';
+  let key = getKey();
+  if(forceKey || !key){
+    key = document.getElementById('keyInput').value.trim();
+  }
+  if(!key){ err.textContent = 'Введите ключ'; return; }
+  try{
+    const res = await fetch('/api/admin/stats?key=' + encodeURIComponent(key));
+    if(res.status === 404){ err.textContent = 'Неверный ключ (или ADMIN_STATS_KEY не задан на сервере)'; return; }
+    if(!res.ok){ err.textContent = 'Ошибка сервера: ' + res.status; return; }
+    const data = await res.json();
+    setKey(key);
+    document.getElementById('gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('genAt').textContent = new Date(data.generated_at).toLocaleString('ru-RU');
+    renderCards(data.totals);
+    renderPerDay(data.renders_per_day_30d);
+    renderTable('topMockups', data.top_mockups_30d, [
+      {key:'mockup', label:'Мокап'}, {key:'count', label:'Рендеров', num:true},
+    ]);
+    renderTable('topUsers', data.top_users_30d, [
+      {key:'email', label:'Email'}, {key:'count', label:'Рендеров', num:true},
+    ]);
+  }catch(e){
+    err.textContent = 'Не удалось загрузить: ' + e.message;
+  }
+}
+
+if(getKey()) load();
+document.getElementById('keyInput').addEventListener('keydown', e => { if(e.key === 'Enter') load(); });
+</script>
+</body>
+</html>
