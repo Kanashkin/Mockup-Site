@@ -1143,10 +1143,15 @@ function drawWatermark(){
   if(!watermarkLogoLoaded)return;
   const w=CW*0.62;
   const h=w*(watermarkLogo.naturalHeight/watermarkLogo.naturalWidth);
+  // Vertical center as a fraction of canvas height — was 0.5 (dead center,
+  // which sat right on top of the design print). Moved down to the
+  // waist/hip area instead, low enough to mostly clear the print zone on
+  // typical mockups while staying well above the canvas bottom.
+  const yCenterFrac=0.64;
   ctx.save();
   ctx.globalAlpha=0.4;
   ctx.globalCompositeOperation='source-over';
-  ctx.drawImage(watermarkLogo,(CW-w)/2,(CH-h)/2,w,h);
+  ctx.drawImage(watermarkLogo,(CW-w)/2,CH*yCenterFrac-h/2,w,h);
   ctx.restore();
 }
 
