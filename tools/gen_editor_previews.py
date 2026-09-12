@@ -2,19 +2,32 @@
 """Generate the client-side EDITOR preview assets that index.html's
 loadMockupAssets() expects and that import_psd_mockups.py never produced:
 
-  - shirt_base_preview.png    (base photo,  stretched to CW x CH = 920x1380)
-  - shirt_mask_preview.png    (alpha mask,  stretched to CW x CH)
-  - <overlay>_preview.png     (per overlay, stretched to CW x CH)
-  - <displace_map>_preview.png (if the package has one, stretched to CW x CH)
+  - shirt_base_preview.png    (base photo,  fit to <= MAX_W x MAX_H)
+  - shirt_mask_preview.png    (alpha mask,  fit to the same size)
+  - <overlay>_preview.png     (per overlay, fit to the same size)
+  - <displace_map>_preview.png (if the package has one, fit to the same size)
   - warp_data.json            (a 256x384 dense lookup grid: for each fixed
-    CWxCH canvas cell, the corresponding SOURCE (print-design) x,y — or -1
-    where the cell falls outside the garment's valid warp region)
+    canvas cell, the corresponding SOURCE (print-design) x,y — or -1 where
+    the cell falls outside the garment's valid warp region — plus the
+    chosen preview_w/preview_h so index.html can size its <canvas> to match)
 
 This mirrors the exact math MockupEngine.__init__ uses for the full-res
 server-side render (Bezier warp mesh -> perspective inverse -> griddata
-registration), just evaluated onto a fixed 256x384 grid tied to the
-editor's fixed CW=920,CH=1380 canvas (920/256 == 1380/384 == 3.59375)
-instead of onto the mockup's own native canvas resolution.
+registration), just evaluated onto a fixed 256x384 grid.
+
+IMPORTANT — preview size must match the package's own aspect ratio
+(found 2026-09-12, "сплюснутое непропорционально" postmortem): this used
+to hard-resize every preview to a fixed 920x1380 (portrait, 2:3-ish)
+regardless of the package's real canvas shape. That's a no-op for
+portrait packages (~2000x3000, same aspect as 920x1380) but silently
+squishes any landscape one (e.g. 3000x2000) non-uniformly — different
+scale factors in x vs y — since index.html's canvas, mouse-position math
+and warp lookup all assume CW/CH represent a UNIFORM scale of the native
+photo. fit_size() below picks a CW,CH that preserves the native aspect
+ratio, fitting inside the same 920x1380 box (unchanged result for
+portrait packages, correctly narrower/shorter for landscape ones). This
+affected mockup105-119 (07.09 batch) and all 66 of the 11.09 batch — see
+the project todo's 2026-09-12 entry before touching this again.
 
 Usage: python3 tools/gen_editor_previews.py mockup68_package mockup69_package ...
 """
@@ -27,8 +40,20 @@ import numpy as np
 from PIL import Image
 from scipy.interpolate import griddata
 
-CW, CH = 920, 1380
-MAP_W, MAP_H = 256, 384  # = CW/3.59375, CH/3.59375 (matches existing packages)
+MAX_W, MAX_H = 920, 1380
+MAP_W, MAP_H = 256, 384  # = MAX_W/3.59375, MAX_H/3.59375 (matches existing packages)
+
+
+def fit_size(native_w, native_h, max_w=MAX_W, max_h=MAX_H):
+    """Largest (w,h) with the same aspect ratio as native_w x native_h that
+    fits inside max_w x max_h — i.e. a uniform scale factor in both axes,
+    never a non-uniform stretch. Returns (max_w, max_h) unchanged for a
+    package whose native aspect already matches the box (all pre-existing
+    portrait packages)."""
+    aspect = native_w / native_h
+    if aspect >= max_w / max_h:
+        return max_w, max(1, round(max_w / aspect))
+    return max(1, round(max_h * aspect)), max_h
 
 
 def _bezier_basis(t):
@@ -93,51 +118,69 @@ def preview_name(fname):
     return f"{base}_preview{ext}"
 
 
-def make_preview(src_path, dst_path):
-    if os.path.exists(dst_path):
+def make_preview(src_path, dst_path, size, force=False):
+    if os.path.exists(dst_path) and not force:
         return
     img = Image.open(src_path)
-    img.resize((CW, CH), Image.LANCZOS).save(dst_path, optimize=True)
+    img.resize(size, Image.LANCZOS).save(dst_path, optimize=True)
 
 
-def process(pkg_dir):
+def process(pkg_dir, force=False):
+    """force=True re-derives preview_w/preview_h and re-resizes every
+    preview image even if they already exist — needed to fix a package
+    whose previews were baked at the old fixed 920x1380 (see fit_size's
+    docstring); leave False for a fresh import (nothing to overwrite)."""
     name = os.path.basename(pkg_dir.rstrip("/"))
     mockup_json = os.path.join(pkg_dir, "mockup.json")
     warp_data_path = os.path.join(pkg_dir, "warp_data.json")
     with open(mockup_json) as f:
         pkg = json.load(f)
 
-    if not os.path.exists(warp_data_path):
-        map_x, map_y, src_w, src_h = compute_map_xy(pkg)
-        warp_data = {
-            "map_w": MAP_W,
-            "map_h": MAP_H,
-            "canvas_w": pkg["canvas"]["width"],
-            "canvas_h": pkg["canvas"]["height"],
-            "src_w": src_w,
-            "src_h": src_h,
-            "map_x": map_x,
-            "map_y": map_y,
-        }
+    pw, ph = fit_size(pkg["canvas"]["width"], pkg["canvas"]["height"])
+
+    if not os.path.exists(warp_data_path) or force:
+        if os.path.exists(warp_data_path) and force:
+            # Preserve the already-computed (and previously verified) warp
+            # map — only the preview_w/preview_h fields need adding/fixing;
+            # recomputing the map from scratch is unnecessary and slow.
+            with open(warp_data_path) as f:
+                warp_data = json.load(f)
+        else:
+            map_x, map_y, src_w, src_h = compute_map_xy(pkg)
+            warp_data = {
+                "map_w": MAP_W,
+                "map_h": MAP_H,
+                "canvas_w": pkg["canvas"]["width"],
+                "canvas_h": pkg["canvas"]["height"],
+                "src_w": src_w,
+                "src_h": src_h,
+                "map_x": map_x,
+                "map_y": map_y,
+            }
+        warp_data["preview_w"] = pw
+        warp_data["preview_h"] = ph
         with open(warp_data_path, "w") as f:
             json.dump(warp_data, f)
 
-    make_preview(os.path.join(pkg_dir, "shirt_base.png"), os.path.join(pkg_dir, "shirt_base_preview.png"))
-    make_preview(os.path.join(pkg_dir, "shirt_full_mask.png"), os.path.join(pkg_dir, "shirt_mask_preview.png"))
+    size = (pw, ph)
+    make_preview(os.path.join(pkg_dir, "shirt_base.png"), os.path.join(pkg_dir, "shirt_base_preview.png"), size, force)
+    make_preview(os.path.join(pkg_dir, "shirt_full_mask.png"), os.path.join(pkg_dir, "shirt_mask_preview.png"), size, force)
     for ov in pkg.get("overlays", []):
         fname = ov["file"]
-        make_preview(os.path.join(pkg_dir, fname), os.path.join(pkg_dir, preview_name(fname)))
+        make_preview(os.path.join(pkg_dir, fname), os.path.join(pkg_dir, preview_name(fname)), size, force)
     disp = pkg.get("displace")
     if disp:
         fname = disp["map"]
-        make_preview(os.path.join(pkg_dir, fname), os.path.join(pkg_dir, preview_name(fname)))
+        make_preview(os.path.join(pkg_dir, fname), os.path.join(pkg_dir, preview_name(fname)), size, force)
 
-    print(f"OK {name}")
+    print(f"OK {name} ({pw}x{ph})")
 
 
 if __name__ == "__main__":
-    for pd in sys.argv[1:]:
+    force = "--force" in sys.argv
+    targets = [a for a in sys.argv[1:] if a != "--force"]
+    for pd in targets:
         try:
-            process(pd)
+            process(pd, force=force)
         except Exception as e:
             print(f"FAIL {pd}: {e}")

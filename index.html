@@ -345,7 +345,12 @@
 </footer>
 
 <script>
-const CW=920,CH=1380;
+// Fit to the source photo's own aspect ratio (see loadMockupAssets/finish)
+// instead of a fixed 920x1380 — a non-matching fixed box silently squishes
+// any non-portrait mockup non-uniformly (2026-09-12 "сплюснутое
+// непропорционально" fix). 920x1380 is just the initial default before the
+// first mockup's warp_data.json arrives.
+let CW=920,CH=1380;
 let SRC_W=2342,SRC_H=2616;
 let currentMockup='mockup3_package';
 let shirtColor='#ffffff';
@@ -527,11 +532,62 @@ function loadMockupAssets(name,resetPosition){
   // previous mockup fully rendered (with its shading/overlays) on screen
   // in the meantime, instead of nulling state up front and redrawing a
   // flat, un-shaded shirt while the new assets are still loading in.
-  let newBase=null,newMask=null,newWarped=null,newWarpMap=null,newOverlays=[],newDisp=null,newSrcW=0,newSrcH=0,newPrintZone=null;
+  //
+  // Pixel extraction (drawing each loaded <img> into a CW x CH offscreen
+  // canvas) is deferred to finish(), NOT done in each onload — CW/CH
+  // themselves depend on this mockup's own aspect ratio (warp_data.json's
+  // preview_w/preview_h), which may not have arrived yet when an image
+  // wins the race. Doing it early against still-stale CW/CH is exactly
+  // what caused the "сплюснутое непропорционально" (non-uniformly
+  // squished) bug for any non-portrait mockup — see fit_size() in
+  // tools/gen_editor_previews.py for the full postmortem.
+  let rawBase=null,rawMask=null,newWarpMap=null,rawOverlays=[],rawDisp=null,newSrcW=0,newSrcH=0,newPrintZone=null;
   let pending=4; // base image, mask image, warp_data.json, mockup.json (overlays+displace resolve as one unit)
   function finish(){
     if(--pending>0)return;
     if(reqId!==mockupLoadSeq)return; // a newer loadMockupAssets call has since superseded this one
+
+    // Now that warp_data.json has definitely arrived, size the canvas to
+    // match THIS mockup's own aspect ratio (preview_w/preview_h — computed
+    // server-side by fit_size(), a uniform scale of the native photo, never
+    // a non-uniform stretch) before drawing anything into it.
+    CW=newWarpMap.preview_w||CW; CH=newWarpMap.preview_h||CH;
+    canvas.width=CW; canvas.height=CH;
+    canvas.style.width=(CW/2)+'px'; canvas.style.height=(CH/2)+'px';
+
+    const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
+    const tg=tmp.getContext('2d');
+
+    tg.drawImage(rawBase,0,0,CW,CH);
+    const newBase=tg.getImageData(0,0,CW,CH).data.slice();
+
+    tg.clearRect(0,0,CW,CH);tg.drawImage(rawMask,0,0,CW,CH);
+    const rawMaskData=tg.getImageData(0,0,CW,CH).data;
+    const newMask=new Float32Array(CW*CH);
+    for(let i=0;i<CW*CH;i++)newMask[i]=rawMaskData[i*4]/255;
+
+    const newOverlays=rawOverlays.map(ro=>{
+      tg.clearRect(0,0,CW,CH);tg.drawImage(ro.img,0,0,CW,CH);
+      return{pixels:tg.getImageData(0,0,CW,CH).data,opacity:ro.opacity,blend:ro.blend};
+    });
+
+    let newDisp=null;
+    if(rawDisp){
+      tg.clearRect(0,0,CW,CH);tg.drawImage(rawDisp.img,0,0,CW,CH);
+      const raw=tg.getImageData(0,0,CW,CH).data;
+      const gray=new Float32Array(CW*CH);
+      for(let i=0;i<CW*CH;i++){
+        const s=i*4;
+        gray[i]=(0.299*raw[s]+0.587*raw[s+1]+0.114*raw[s+2])/255;
+      }
+      // Scales are defined in full-res canvas units, so they're scaled down
+      // by CW/canvas_w for this preview's resolution.
+      const ratio=CW/newWarpMap.canvas_w;
+      newDisp={gray,hScale:rawDisp.h_scale*ratio,vScale:rawDisp.v_scale*ratio};
+    }
+
+    const newWarped=computeWarpLookup(newWarpMap);
+
     basePixels=newBase;maskPixels=newMask;warpedPixels=newWarped;warpMap=newWarpMap;
     overlaysData=newOverlays;dispData=newDisp;SRC_W=newSrcW;SRC_H=newSrcH;
     // Recompute this mockup's own natural default (from its print zone) on
@@ -567,32 +623,18 @@ function loadMockupAssets(name,resetPosition){
 
   const si=new Image();
   si.crossOrigin='anonymous';
-  si.onload=()=>{
-    const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
-    const tg=tmp.getContext('2d');tg.drawImage(si,0,0,CW,CH);
-    newBase=tg.getImageData(0,0,CW,CH).data.slice();
-    finish();
-  };
+  si.onload=()=>{rawBase=si;finish();};
   si.onerror=()=>{console.error('Failed to load shirt_base preview for',name);if(reqId===mockupLoadSeq)showLoadError();};
   si.src='/'+name+'/'+previewName('shirt_base.png')+'?v='+Date.now();
 
   const mi=new Image();
   mi.crossOrigin='anonymous';
-  mi.onload=()=>{
-    const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
-    const tg=tmp.getContext('2d');tg.drawImage(mi,0,0,CW,CH);
-    const raw=tg.getImageData(0,0,CW,CH).data;
-    const mask=new Float32Array(CW*CH);
-    for(let i=0;i<CW*CH;i++)mask[i]=raw[i*4]/255;
-    newMask=mask;
-    finish();
-  };
+  mi.onload=()=>{rawMask=mi;finish();};
   mi.onerror=()=>{console.error('Failed to load shirt_mask preview for',name);if(reqId===mockupLoadSeq)showLoadError();};
   mi.src='/'+name+'/shirt_mask_preview.png?v='+Date.now();
 
   fetch('/'+name+'/warp_data.json?v='+Date.now()).then(r=>r.json()).then(d=>{
     newWarpMap=d;newSrcW=d.src_w;newSrcH=d.src_h;
-    newWarped=computeWarpLookup(d);
     finish();
   }).catch(err=>{
     console.error('Failed to load warp_data.json for',name,err);
@@ -607,17 +649,15 @@ function loadMockupAssets(name,resetPosition){
     const loaded=new Array(list.length);
     function subDone(){
       if(--subPending>0)return;
-      newOverlays=loaded;
+      rawOverlays=loaded;
       finish();
     }
-    if(subPending===0){newOverlays=[];finish();return;}
+    if(subPending===0){rawOverlays=[];finish();return;}
     list.forEach((ov,idx)=>{
       const oi=new Image();
       oi.crossOrigin='anonymous';
       oi.onload=()=>{
-        const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
-        const tg=tmp.getContext('2d');tg.drawImage(oi,0,0,CW,CH);
-        loaded[idx]={pixels:tg.getImageData(0,0,CW,CH).data,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
+        loaded[idx]={img:oi,opacity:ov.opacity,blend:BLEND_FNS[ov.blend_mode]};
         subDone();
       };
       oi.onerror=()=>{console.error('Failed to load overlay',ov.file,'for',name);if(reqId===mockupLoadSeq)showLoadError();};
@@ -625,22 +665,13 @@ function loadMockupAssets(name,resetPosition){
     });
 
     // Fabric-texture displacement (Photoshop Displace filter equivalent, mirrors
-    // server.py's _apply_displace). Scales are defined in full-res canvas units,
-    // so they're scaled down by CW/canvas.width for this preview's resolution.
+    // server.py's _apply_displace) — h_scale/v_scale get rescaled to preview
+    // resolution once CW is final, in finish() above.
     if(disp){
-      const ratio=CW/pkg.canvas.width;
       const di=new Image();
       di.crossOrigin='anonymous';
       di.onload=()=>{
-        const tmp=document.createElement('canvas');tmp.width=CW;tmp.height=CH;
-        const tg=tmp.getContext('2d');tg.drawImage(di,0,0,CW,CH);
-        const raw=tg.getImageData(0,0,CW,CH).data;
-        const gray=new Float32Array(CW*CH);
-        for(let i=0;i<CW*CH;i++){
-          const s=i*4;
-          gray[i]=(0.299*raw[s]+0.587*raw[s+1]+0.114*raw[s+2])/255;
-        }
-        newDisp={gray,hScale:disp.h_scale*ratio,vScale:disp.v_scale*ratio};
+        rawDisp={img:di,h_scale:disp.h_scale,v_scale:disp.v_scale};
         subDone();
       };
       di.onerror=()=>{console.error('Failed to load displacement map for',name);if(reqId===mockupLoadSeq)showLoadError();};
@@ -1796,10 +1827,11 @@ document.getElementById('rotate90Btn').addEventListener('click',()=>{
 // center, same as the Size slider/wheel), the handle above the top edge
 // rotates (dragging in a circle around the box center), and anywhere else
 // on the design falls back to the original move behavior.
-// The canvas is drawn at CWxCH (920x1380) but displayed at half that size
-// via CSS — handles[] and every pos computation live in the CW/CH buffer
-// space, so mouse coordinates (which arrive in CSS-pixel space) need to be
-// scaled up by CW/rect.width, CH/rect.height before comparing against them.
+// The canvas is drawn at CWxCH (up to 920x1380, aspect-fit per package —
+// see loadMockupAssets/fit_size) but displayed at half that size via CSS —
+// handles[] and every pos computation live in the CW/CH buffer space, so
+// mouse coordinates (which arrive in CSS-pixel space) need to be scaled up
+// by CW/rect.width, CH/rect.height before comparing against them.
 // (offsetX/offsetY are also CSS pixels, same fix applies there.)
 function canvasXY(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
