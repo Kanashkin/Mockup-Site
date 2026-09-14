@@ -339,22 +339,51 @@ class MockupEngine:
         # physically meaningless) source coordinates there too, so any part of
         # the design whose placement box extends far enough eventually lands
         # some content on the sleeve as well as the chest.
-        # FIX: independently of shirt_mask, only let the design layer render
-        # within a "trusted zone" — the print_zone rectangle (the area the
-        # package was actually calibrated for), enlarged 2x on each side and
-        # forward-warped (mesh Bezier eval + the forward perspective transform,
-        # i.e. the exact inverse of the H_inv/griddata process above) through
-        # the SAME warp to get its true canvas-space footprint. A generous 2x
-        # margin still lets legitimately oversized prints work (verified: 2x
-        # print_zone width covers the confirmed-safe size=0.5 case with room
-        # to spare) while cropping cleanly — instead of bleeding onto the
-        # sleeve — once a print is pushed far beyond what this package's warp
-        # was calibrated for. See the project todo's 2026-09-14 entry.
+        #
+        # FIX v1 (same day, superseded below): only let the design layer
+        # render within the print_zone rectangle enlarged 2x on each side and
+        # FORWARD-warped (mesh Bezier eval + the forward perspective
+        # transform) through the same warp to get its canvas-space footprint.
+        # This stopped the sleeve ghost, but a real user render on this same
+        # package ("тут явный сдвиг маски" postmortem, same day) showed it
+        # was WAY too aggressive on legitimate content: forward-warping a
+        # rectangle enlarged in SOURCE space is numerically unstable, because
+        # a perspective transform's scale factor blows up non-uniformly as
+        # source points approach/pass the homography's vanishing region —
+        # going from a 2x to a 3x enlargement didn't grow the canvas-space
+        # footprint by 50%, it ballooned to cover the model's face and the
+        # background outside the shirt entirely, while the ORIGINAL 2x case
+        # still sliced a hard, visible seam straight down the torso (cutting
+        # off real print content over the ribs/hip — confirmed on a real
+        # design render, not just the placeholder). Any fixed multiplier is
+        # fighting the same instability; there's no safe knob to turn.
+        #
+        # FIX v2 (this version): stop forward-warping an enlarged rectangle
+        # at all. Forward-warp only the print_zone AT ITS OWN SIZE (1x) —
+        # stable, since it's exactly the area this package's warp was
+        # calibrated for — to get its true canvas-space footprint, then grow
+        # that footprint by a fixed MARGIN IN CANVAS PIXELS (a distance
+        # transform, not a re-warp), and clip to shirt_mask. Growing a shape
+        # by N canvas pixels is linear and predictable no matter how close
+        # the source geometry is to the homography's unstable region, so a
+        # generous margin can't blow up into the background — cv2.dilate
+        # with a huge kernel is the textbook way to do this but is O(margin^2)
+        # per pixel and took >90s here; cv2.distanceTransform gives the exact
+        # same "grow by N px" result from one cheap pass (~0.1s).
+        # margin = 18% of the shorter canvas side — picked by rendering this
+        # package's own oversized-print regression images (0.35-1.0) at a
+        # few candidate margins and eyeballing the result: enough to reach
+        # the real torso edges (verified: no more clipping over the ribs/hip
+        # at any tested size) while stopping short of the shoulder/sleeve
+        # seam (verified: no ghost reappears at size=1.0, same test as the
+        # v1 fix). shirt_mask does the rest of the work of following the
+        # actual garment silhouette instead of a straight-edged margin.
+        # See the project todo's 2026-09-14 entries (both postmortems) before
+        # touching this again — re-verify against BOTH regressions (the
+        # sleeve ghost AND the torso clipping) with real renders, not just a
+        # visual overlay, before changing the margin.
         H = cv2.getPerspectiveTransform(src_corners, canvas_corners)
         pz = self.print_zone
-        zx0, zy0 = (pz["x0"]+pz["x1"])/2, (pz["y0"]+pz["y1"])/2
-        zhw = (pz["x1"]-pz["x0"])/2 * 2.0
-        zhh = (pz["y1"]-pz["y0"])/2 * 2.0
 
         def _forward(sx, sy):
             u, v = sx/src_w, sy/src_h
@@ -364,17 +393,22 @@ class MockupEngine:
             cp = H@np.array([px, py, 1.0])
             return cp[0]/cp[2], cp[1]/cp[2]
 
-        _N2 = 24
+        _N2 = 40
         boundary = []
         for t in np.linspace(0, 1, _N2):
-            boundary.append(_forward(zx0-zhw+2*zhw*t, zy0-zhh))
-            boundary.append(_forward(zx0-zhw+2*zhw*t, zy0+zhh))
-            boundary.append(_forward(zx0-zhw, zy0-zhh+2*zhh*t))
-            boundary.append(_forward(zx0+zhw, zy0-zhh+2*zhh*t))
+            boundary.append(_forward(pz["x0"]+(pz["x1"]-pz["x0"])*t, pz["y0"]))
+            boundary.append(_forward(pz["x0"]+(pz["x1"]-pz["x0"])*t, pz["y1"]))
+            boundary.append(_forward(pz["x0"], pz["y0"]+(pz["y1"]-pz["y0"])*t))
+            boundary.append(_forward(pz["x1"], pz["y0"]+(pz["y1"]-pz["y0"])*t))
         boundary = np.array(boundary, dtype=np.float32)
         hull = cv2.convexHull(boundary)
-        trusted = np.zeros((ch, cw), dtype=np.uint8)
-        cv2.fillConvexPoly(trusted, hull.astype(np.int32), 255)
+        zone = np.zeros((ch, cw), dtype=np.uint8)
+        cv2.fillConvexPoly(zone, hull.astype(np.int32), 255)
+
+        margin = 0.18 * min(cw, ch)
+        dist_outside = cv2.distanceTransform(255-zone, cv2.DIST_L2, 5)
+        trusted = ((dist_outside <= margin).astype(np.uint8) * 255)
+        trusted = cv2.bitwise_and(trusted, (self.shirt_mask > 0.5).astype(np.uint8) * 255)
         # Feather the edge so oversized prints fade out softly at the trusted
         # boundary instead of a hard crop line, matching the rest of the
         # pipeline's soft-edged masks.
