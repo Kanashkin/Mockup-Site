@@ -930,10 +930,32 @@ const MOCKUPS=[
 // second image stacked on top that fades in on hover (a colored preview),
 // purely a homepage visual — clicking through still opens the editor with
 // its normal blank/white default, untouched by whatever was shown on hover.
+//
+// Gallery/model-group/"You might like" grids all use THUMB files (see
+// tools/gen_gallery_thumbs.py — 2026-09-14, "какого размера привью
+// показваешь?"), not the full shirt_preview*.png directly: those PNGs are
+// also the OG/social-share image (up to 920x1380px, up to ~2.3MB) while
+// .gallery-grid's own CSS caps the displayed tile around 200-300px wide —
+// downloading the full share-image PNG just to show a small cropped tile
+// was pure waste. previewName() maps "shirt_preview.png" ->
+// "shirt_preview_thumb.jpg" (and "shirt_preview_color.png" ->
+// "shirt_preview_color_thumb.jpg", etc.) to match what that script writes.
+// shirt_preview.png itself is untouched and still used for OG/Twitter tags.
+// NOTE: deliberately NOT named previewName() — that name is already taken
+// (above, ~line 527) by the editor's overlay/displacement-map preview
+// convention (append "_preview" before the extension, keep .png), a
+// DIFFERENT naming scheme. A second `function previewName` here would
+// silently redefine the first one (both are plain top-level function
+// declarations in the same script) and break every overlay/displacement
+// preview load in the editor canvas — caught before shipping by grepping
+// for the name first. Keep this distinctly named if it's ever touched again.
+function galleryThumbName(fname){
+  return fname.replace(/\.png$/,'_thumb.jpg');
+}
 function previewHTML(m){
-  const base='<img class="preview-base" src="/'+m.id+'/shirt_preview.png" alt="'+m.label+'" loading="lazy">';
+  const base='<img class="preview-base" src="/'+m.id+'/'+galleryThumbName('shirt_preview.png')+'" alt="'+m.label+'" loading="lazy">';
   if(!m.hoverPreview)return base;
-  return base+'<img class="preview-hover" src="/'+m.id+'/'+m.hoverPreview+'" alt="'+m.label+'" loading="lazy">';
+  return base+'<img class="preview-hover" src="/'+m.id+'/'+galleryThumbName(m.hoverPreview)+'" alt="'+m.label+'" loading="lazy">';
 }
 // Models listed here show as a single card on the home screen (their first
 // photo, with a count badge) instead of one card per photo — for a model
