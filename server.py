@@ -8,6 +8,7 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request, Dep
 from fastapi.responses import Response, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -42,6 +43,14 @@ if SENTRY_DSN:
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Compresses every response over 1KB (warp_data.json in particular — a dense
+# per-package lookup grid — is ~1.8MB uncompressed and gzips to ~400KB even
+# unmodified, since it's mostly repeated "-1.0" sentinels and floats; see
+# gen_editor_previews.py's rounding fix for the other half of this, and the
+# project todo's 2026-09-14 "editor load speed" entry for the full numbers.
+# PNG/JPEG assets are already compressed so this is a no-op for those, and
+# the minimum_size floor skips wasting CPU on tiny responses.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Per-IP request throttling (CORS above is wide open by design — anyone can
 # call the API from any origin — so this is the only thing standing between

@@ -638,7 +638,11 @@ function loadMockupAssets(name,resetPosition){
   si.crossOrigin='anonymous';
   si.onload=()=>{rawBase=si;finish();};
   si.onerror=()=>{console.error('Failed to load shirt_base preview for',name);if(reqId===mockupLoadSeq)showLoadError();};
-  si.src='/'+name+'/'+previewName('shirt_base.png')+'?v='+Date.now();
+  // .jpg, not previewName('shirt_base.png') → a .png sibling: shirt_base_preview
+  // is saved as JPEG now (much smaller for a fully-opaque photo — see
+  // gen_editor_previews.py) while every other preview here stays PNG for its
+  // alpha channel, so this one can't use the generic previewName() convention.
+  si.src='/'+name+'/shirt_base_preview.jpg?v='+Date.now();
 
   const mi=new Image();
   mi.crossOrigin='anonymous';

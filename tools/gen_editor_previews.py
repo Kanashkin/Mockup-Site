@@ -29,6 +29,22 @@ portrait packages, correctly narrower/shorter for landscape ones). This
 affected mockup105-119 (07.09 batch) and all 66 of the 11.09 batch — see
 the project todo's 2026-09-12 entry before touching this again.
 
+IMPORTANT — editor load speed (2026-09-14): warp_data.json's map_x/map_y
+used to be dumped at full float64 precision (~18-21 significant digits
+per number, 98304 numbers) — 1.7-1.8MB per package for no benefit, since
+the values are normalized [0,1] fractions used to look up a source pixel
+and 5 decimal places is already ~1000x finer than a single source pixel.
+_round_warp_floats()/_dump_warp_data() below round to 5dp and dump with
+compact separators, which combined with server.py's new GZipMiddleware
+cuts this from ~1.8MB to ~120KB on the wire. shirt_base_preview is now
+saved as JPEG (quality 85) instead of PNG for the same reason — it's a
+fully opaque photo (no alpha channel to preserve), and PNG is a poor fit
+for photographic content: ~670KB as PNG vs ~75KB as JPEG, and gzip does
+NOT help PNG at all (already-compressed data doesn't compress further).
+shirt_mask_preview/overlay previews stay PNG — they carry real alpha
+(soft mask edges, overlay clipping) that JPEG's lossy compression would
+visibly degrade. See the project todo's 2026-09-14 entry for the numbers.
+
 Usage: python3 tools/gen_editor_previews.py mockup68_package mockup69_package ...
 """
 import json
@@ -118,11 +134,32 @@ def preview_name(fname):
     return f"{base}_preview{ext}"
 
 
-def make_preview(src_path, dst_path, size, force=False):
+# 5 decimal places on a normalized [0,1] fraction is ~1000x finer than a
+# single source pixel even on a 4000px-wide source image — free ~55% size
+# cut (pre-gzip) for zero perceptible accuracy loss. See module docstring.
+WARP_FLOAT_DP = 5
+
+
+def _round_warp_floats(vals):
+    return [v if v == -1 else round(v, WARP_FLOAT_DP) for v in vals]
+
+
+def _dump_warp_data(path, warp_data):
+    warp_data["map_x"] = _round_warp_floats(warp_data["map_x"])
+    warp_data["map_y"] = _round_warp_floats(warp_data["map_y"])
+    with open(path, "w") as f:
+        json.dump(warp_data, f, separators=(",", ":"))
+
+
+def make_preview(src_path, dst_path, size, force=False, fmt="PNG"):
     if os.path.exists(dst_path) and not force:
         return
     img = Image.open(src_path)
-    img.resize(size, Image.LANCZOS).save(dst_path, optimize=True)
+    img = img.resize(size, Image.LANCZOS)
+    if fmt == "JPEG":
+        img.convert("RGB").save(dst_path, "JPEG", quality=85, optimize=True)
+    else:
+        img.save(dst_path, optimize=True)
 
 
 def process(pkg_dir, force=False):
@@ -159,11 +196,21 @@ def process(pkg_dir, force=False):
             }
         warp_data["preview_w"] = pw
         warp_data["preview_h"] = ph
-        with open(warp_data_path, "w") as f:
-            json.dump(warp_data, f)
+        _dump_warp_data(warp_data_path, warp_data)
 
     size = (pw, ph)
-    make_preview(os.path.join(pkg_dir, "shirt_base.png"), os.path.join(pkg_dir, "shirt_base_preview.png"), size, force)
+    # JPEG, not PNG: shirt_base is a fully opaque photo (no alpha to lose),
+    # and PNG compresses photographic content poorly (~9x larger than JPEG
+    # here) — see module docstring. shirt_mask/overlays keep PNG below since
+    # their alpha channel IS meaningful (soft edges, overlay clipping).
+    base_preview_path = os.path.join(pkg_dir, "shirt_base_preview.jpg")
+    make_preview(os.path.join(pkg_dir, "shirt_base.png"), base_preview_path, size, force, fmt="JPEG")
+    stale_png = os.path.join(pkg_dir, "shirt_base_preview.png")
+    if force and os.path.exists(stale_png):
+        try:
+            os.remove(stale_png)  # leftover from before the JPEG switch; best-effort
+        except OSError:
+            pass
     make_preview(os.path.join(pkg_dir, "shirt_full_mask.png"), os.path.join(pkg_dir, "shirt_mask_preview.png"), size, force)
     for ov in pkg.get("overlays", []):
         fname = ov["file"]
