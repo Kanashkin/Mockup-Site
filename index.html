@@ -1066,7 +1066,7 @@ async function refreshAuthUI(){
     guest.style.display='none';userEl.style.display='inline-flex';
     document.getElementById('userEmail').textContent=currentUser.email;
     const q=document.getElementById('renderQuota');
-    if(currentUser.subscription.status==='active'){
+    if(currentUser.subscription.status==='active'||currentUser.unlimited){
       q.textContent='';
     }else{
       const left=Math.max(0,currentUser.free_render_limit-currentUser.render_count);
@@ -1139,6 +1139,8 @@ function renderCabinet(){
   if(sub.status==='active'){
     if(until)html+='<div class="plan-row"><span>Renews</span><span>'+until+'</span></div>';
     html+='<button class="btn2" id="cancelSubBtn" style="margin-top:14px">Cancel subscription</button>';
+  }else if(currentUser.unlimited){
+    html+='<div class="plan-row"><span>Renders</span><span>Unlimited (admin)</span></div>';
   }else{
     const left=Math.max(0,currentUser.free_render_limit-currentUser.render_count);
     html+='<div class="plan-row"><span>Free renders</span><span>'+left+' of '+currentUser.free_render_limit+' left</span></div>';

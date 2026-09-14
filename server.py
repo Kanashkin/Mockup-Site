@@ -74,6 +74,18 @@ app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "d
 # and User.render_count in db.py).
 FREE_RENDER_LIMIT = int(os.environ.get("FREE_RENDER_LIMIT", "5"))
 
+# Site-owner/admin accounts that should never hit the free-render limit or
+# need a real PayPal subscription just to test the site — comma-separated,
+# case-insensitive. Set ADMIN_EMAILS on Railway to override; the fallback
+# here is just so the owner isn't blocked out of the box.
+ADMIN_EMAILS = {
+    e.strip().lower()
+    for e in os.environ.get("ADMIN_EMAILS", "etokostanaydetka@gmail.com").split(",")
+    if e.strip()
+}
+def is_admin_user(user: User) -> bool:
+    return user.email.lower() in ADMIN_EMAILS
+
 # "Oживить" — pay-per-use photo-to-video animation of an already-rendered
 # mockup (see the /api/animate/* routes below and animate.py). Priced to
 # cover PiAPI/Kling's ~$0.50-1 cost per 5s clip plus PayPal fees & margin.
@@ -541,6 +553,11 @@ def me(request: Request, db: Session = Depends(get_db)):
             "status": sub.status if sub else "none",
             "current_period_end": sub.current_period_end.isoformat() if sub and sub.current_period_end else None,
         },
+        # True for ADMIN_EMAILS accounts (see server.py) — reported separately
+        # from subscription.status rather than faking "active" so the cabinet
+        # doesn't show a real Cancel-subscription button for a subscription
+        # that doesn't actually exist in PayPal.
+        "unlimited": is_admin_user(user),
         # Free-tier usage — meaningless once subscription.status is "active"
         # (unlimited), but harmless to always send.
         "render_count": user.render_count,
@@ -803,7 +820,11 @@ async def render_mockup(
     # already over the limit gets a fast 402 instead of paying the cost of a
     # render that would've been thrown away anyway.
     sub = db.query(Subscription).filter(Subscription.user_id == user.id).first()
-    has_active_sub = bool(sub and sub.is_active())
+    # Admin/site-owner accounts (see ADMIN_EMAILS) are treated as if they had
+    # an active subscription for gating purposes, without an actual PayPal
+    # subscription existing — so testing the site never requires burning
+    # free renders or paying.
+    has_active_sub = bool(sub and sub.is_active()) or is_admin_user(user)
     if not has_active_sub and user.render_count >= FREE_RENDER_LIMIT:
         raise HTTPException(402, f"Free limit of {FREE_RENDER_LIMIT} renders reached — subscribe for unlimited high-res downloads")
     # Fail loudly on an unknown mockup id instead of silently substituting
