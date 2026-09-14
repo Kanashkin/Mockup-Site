@@ -402,50 +402,28 @@ class MockupEngine:
 # Instead we just record which package names exist here, and load/cache
 # engines lazily (see get_engine below), bounding memory to a handful of
 # recently-used mockups instead of all of them at once.
+#
+# BUG POSTMORTEM (2026-09-14, found via "на новых мокапах рендерится другие
+# фотки"): this used to be a hardcoded literal list of package names, capped
+# at "mockup141_package". Every subsequent import batch (the 66-package
+# 11.09 batch: mockup1000-1073) was added to index.html's gallery/editor but
+# NEVER added to this list — so get_engine() returned None for every one of
+# them, and /render's `get_engine(mockup) or get_engine(MOCKUP_NAMES[0])`
+# fallback (see below) silently rendered mockup1_package's photo instead for
+# ALL 66 new mockups, with no error surfaced anywhere. Editor previews were
+# unaffected (they're generated client-side from each package's own preview
+# assets, never touching this list), which is exactly why it went unnoticed
+# through bug 3 and bug 4's fixes/verification — both only ever exercised
+# the *client-side* preview-loading path, never an actual /render call
+# against a new-batch mockup. Fixed by discovering packages from disk
+# instead of hardcoding names, so a future import can't silently repeat
+# this — no list to forget to update.
 import collections
-MOCKUP_NAMES = []
-for name in ["mockup1_package","mockup14_package","mockup3_package","mockup4_package",
-             "mockup5_package","mockup6_package","mockup7_package","mockup8_package",
-             "mockup9_package","mockup10_package","mockup11_package","mockup12_package",
-             "mockup13_package","mockup15_package","mockup16_package","mockup17_package",
-             "mockup18_package","mockup19_package","mockup20_package","mockup21_package",
-             "mockup22_package","mockup23_package","mockup24_package","mockup25_package",
-             "mockup26_package","mockup27_package","mockup28_package","mockup29_package",
-             "mockup30_package","mockup31_package","mockup32_package","mockup33_package",
-             "mockup34_package","mockup35_package","mockup36_package","mockup37_package",
-             "mockup38_package","mockup39_package","mockup40_package","mockup41_package",
-             "mockup42_package","mockup43_package","mockup44_package","mockup45_package",
-             "mockup46_package","mockup47_package","mockup48_package","mockup49_package",
-             "mockup50_package","mockup51_package","mockup52_package","mockup53_package",
-             "mockup54_package","mockup55_package","mockup56_package","mockup57_package",
-             "mockup58_package","mockup59_package","mockup60_package","mockup61_package",
-             "mockup62_package","mockup63_package","mockup64_package","mockup65_package",
-             "mockup66_package","mockup67_package",
-             # 07.09 import — 6 raw PSD template packs converted via
-             # tools/import_psd_mockups.py (see that script's docstring for
-             # how the PSD Smart-Object warp data maps onto mockup.json).
-             "mockup68_package","mockup69_package","mockup70_package","mockup71_package",
-             "mockup72_package","mockup73_package","mockup74_package","mockup75_package",
-             "mockup76_package","mockup77_package","mockup78_package","mockup79_package",
-             "mockup80_package","mockup81_package","mockup82_package","mockup83_package",
-             "mockup84_package","mockup85_package","mockup86_package","mockup87_package",
-             "mockup88_package","mockup89_package","mockup90_package","mockup91_package",
-             "mockup92_package","mockup93_package","mockup94_package","mockup95_package",
-             "mockup96_package","mockup97_package","mockup98_package","mockup99_package",
-             "mockup100_package","mockup101_package","mockup102_package","mockup103_package",
-             "mockup104_package","mockup105_package","mockup106_package","mockup107_package",
-             "mockup108_package","mockup109_package","mockup110_package","mockup111_package",
-             "mockup112_package","mockup113_package","mockup114_package","mockup115_package",
-             "mockup116_package","mockup117_package","mockup118_package","mockup119_package",
-             "mockup120_package","mockup121_package","mockup122_package","mockup123_package",
-             "mockup124_package","mockup125_package","mockup126_package","mockup127_package",
-             "mockup128_package","mockup129_package","mockup130_package","mockup131_package",
-             "mockup132_package","mockup133_package","mockup134_package","mockup135_package",
-             "mockup136_package","mockup137_package","mockup138_package","mockup139_package",
-             "mockup140_package","mockup141_package"]:
-    d = os.path.join(BASE_DIR, name)
-    if os.path.exists(os.path.join(d, "mockup.json")):
-        MOCKUP_NAMES.append(name)
+MOCKUP_NAMES = sorted(
+    name for name in os.listdir(BASE_DIR)
+    if name.startswith("mockup") and name.endswith("_package")
+    and os.path.exists(os.path.join(BASE_DIR, name, "mockup.json"))
+)
 
 _ENGINE_CACHE = collections.OrderedDict()
 _ENGINE_CACHE_MAX = int(os.environ.get("ENGINE_CACHE_MAX", "4"))
@@ -828,7 +806,15 @@ async def render_mockup(
     has_active_sub = bool(sub and sub.is_active())
     if not has_active_sub and user.render_count >= FREE_RENDER_LIMIT:
         raise HTTPException(402, f"Free limit of {FREE_RENDER_LIMIT} renders reached — subscribe for unlimited high-res downloads")
-    engine = get_engine(mockup) or get_engine(MOCKUP_NAMES[0])
+    # Fail loudly on an unknown mockup id instead of silently substituting
+    # some other package's engine — a silent fallback here (previously
+    # `get_engine(mockup) or get_engine(MOCKUP_NAMES[0])`) is exactly what
+    # let 66 packages render the wrong photo for days without any error
+    # surfacing anywhere. See MOCKUP_NAMES' definition above for the full
+    # postmortem.
+    engine = get_engine(mockup)
+    if engine is None:
+        raise HTTPException(400, f"Unknown mockup: {mockup}")
     if not file.content_type.startswith("image/"):
         raise HTTPException(400,"File must be an image")
     data = await file.read()
