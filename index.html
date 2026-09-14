@@ -353,6 +353,18 @@
 let CW=920,CH=1380;
 let SRC_W=2342,SRC_H=2616;
 let currentMockup='mockup3_package';
+// The mockup whose assets are ACTUALLY drawn on the canvas right now — only
+// ever set at the end of loadMockupAssets()'s finish(), never at click time.
+// currentMockup above flips synchronously the instant a mockup/like-card is
+// clicked, but loadMockupAssets keeps the PREVIOUS mockup's fully-shaded
+// photo on screen while the new one's assets are still loading (see the
+// comment in loadMockupAssets). If the user clicks Generate High-Res during
+// that window, currentMockup already points at the new (not-yet-visible)
+// mockup while the canvas — and the render the user is expecting — is still
+// the old one; sending currentMockup to /render then renders a DIFFERENT
+// photo than what's on screen. loadedMockup always matches the canvas, so
+// the render handler below reads this instead.
+let loadedMockup='mockup3_package';
 let shirtColor='#ffffff';
 let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null,dispData=null;
 let designImg=null,file=null;
@@ -601,6 +613,7 @@ function loadMockupAssets(name,resetPosition){
     // design out to 35% around that zone's center overshoots the zone
     // itself and samples past the edge of the valid warp region — which is
     // what made the design look shifted/cut off near the shoulder there.
+    loadedMockup=name;
     mockupDefaultPos=(newPrintZone&&newSrcW&&newSrcH)?{
       cx:(newPrintZone.x0+newPrintZone.x1)/2/newSrcW,
       cy:(newPrintZone.y0+newPrintZone.y1)/2/newSrcH,
@@ -2003,7 +2016,11 @@ document.getElementById('renderBtn').addEventListener('click',async()=>{
   document.getElementById('resultPlaceholder').style.display='none';
   resetAnimateBox();
   const form=new FormData();
-  form.append('file',file);form.append('color',shirtColor);form.append('mockup',currentMockup);
+  // loadedMockup, not currentMockup: currentMockup flips the instant a
+  // mockup/like-card is clicked, but the canvas (and this render) must match
+  // whatever photo is actually visible right now — see loadedMockup's
+  // declaration for the race this avoids.
+  form.append('file',file);form.append('color',shirtColor);form.append('mockup',loadedMockup);
   // Distort/Warp: send the corners/mesh in absolute source-pixel coordinates
   // (same space server.py's cv2 calls expect) instead of x/y/w/h/rot — the
   // corners/mesh already fully describe the placement, rotation included.
