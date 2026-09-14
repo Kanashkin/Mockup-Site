@@ -280,41 +280,106 @@ class MockupEngine:
         print("Precomputing warp map...")
         cw,ch = self.canvas_w,self.canvas_h
 
-        # Compute the warp on a reduced grid (cheap: a few hundred thousand
-        # points regardless of canvas size) instead of per-pixel cubic
-        # griddata over the full canvas (which can be many millions of
-        # points for a large canvas/warp region and was blowing up memory
-        # and taking minutes on some mockups). The reduced grid is then
-        # upsampled to full canvas resolution with cheap bilinear resize —
-        # visually indistinguishable since the warp itself is a smooth,
-        # low-frequency deformation defined by just 16 control points.
-        rw,rh = 512,768
-        ys_r,xs_r = np.mgrid[0:rh,0:rw]
-        px_r = (xs_r.ravel()+0.5)/rw*cw
-        py_r = (ys_r.ravel()+0.5)/rh*ch
+        # Compute the warp map at FULL canvas resolution directly (one
+        # griddata call per axis), rather than on a reduced grid upsampled
+        # via bilinear resize.
+        #
+        # BUG POSTMORTEM (2026-09-14, "призрачный дубликат" — a large,
+        # washed-out duplicate of the print bleeding across the collar/
+        # shoulder on mockup121_package, in addition to the correctly
+        # placed copy on the chest): this used to evaluate the warp on a
+        # coarse 512x768 grid and upsample it to full canvas resolution
+        # with cv2.resize, on the assumption that the warp is a smooth,
+        # low-frequency deformation everywhere (true for most of the
+        # canvas, since it's driven by just 16 Bezier control points).
+        # That assumption breaks down right at the neckline/collar
+        # boundary on some poses (e.g. a raised arm twisting the collar):
+        # the true per-pixel valid/invalid boundary — and the source
+        # coordinates near it — can sweep by hundreds of pixels within a
+        # handful of canvas rows. Confirmed on mockup121_package: the
+        # real boundary moves ~1700px in x over just 9 canvas rows
+        # (y=487-496), far faster than the coarse grid's ~4px/cell
+        # spacing could represent. Bilinear-resizing that under-sampled
+        # region bridged what should have been two separate valid/
+        # invalid areas, smearing a duplicated "ghost" of the design
+        # across the gap. Every package here tops out around 2000x3000px
+        # (~6M px — checked across all 208 packages), so a direct
+        # full-resolution evaluation costs only a few seconds at
+        # engine-load time (once, then cached) and removes the artifact
+        # entirely — see the project todo's 2026-09-14 entry before
+        # touching this again.
+        ys_r,xs_r = np.mgrid[0:ch,0:cw]
+        px_r = (xs_r.ravel()+0.5)
+        py_r = (ys_r.ravel()+0.5)
         cp_h_r = np.column_stack([px_r,py_r,np.ones_like(px_r)])
         sp_h_r = (H_inv@cp_h_r.T).T
         src_x_r = sp_h_r[:,0]/sp_h_r[:,2]; src_y_r = sp_h_r[:,1]/sp_h_r[:,2]
         in_r_r = (src_x_r>=-300)&(src_x_r<=src_w+300)&(src_y_r>=-300)&(src_y_r<=src_h+300)
-        rx_r = np.full(rw*rh,np.nan); ry_r = np.full(rw*rh,np.nan)
         ridx_r = np.where(in_r_r)[0]
         rsp_r = np.column_stack([src_x_r[in_r_r],src_y_r[in_r_r]])
         rxv = griddata(displaced,reg_x,rsp_r,method="linear")
         ryv = griddata(displaced,reg_y,rsp_r,method="linear")
         valid_r = ~(np.isnan(rxv)|np.isnan(ryv))
-        rx_r[ridx_r[valid_r]] = rxv[valid_r]
-        ry_r[ridx_r[valid_r]] = ryv[valid_r]
-        rx_grid = rx_r.reshape(rh,rw); ry_grid = ry_r.reshape(rh,rw)
-        valid_grid = (~np.isnan(rx_grid)).astype(np.float32)
 
-        rx_full = cv2.resize(np.nan_to_num(rx_grid,nan=0.0),(cw,ch),interpolation=cv2.INTER_LINEAR)
-        ry_full = cv2.resize(np.nan_to_num(ry_grid,nan=0.0),(cw,ch),interpolation=cv2.INTER_LINEAR)
-        valid_full = cv2.resize(valid_grid,(cw,ch),interpolation=cv2.INTER_LINEAR) > 0.5
+        self._rx = rxv[valid_r]
+        self._ry = ryv[valid_r]
+        self._ridx = ridx_r[valid_r]
 
-        ridx = np.where(valid_full.ravel())[0]
-        self._rx = rx_full.ravel()[ridx]
-        self._ry = ry_full.ravel()[ridx]
-        self._ridx = ridx
+        # === "Trusted zone" mask (2026-09-14, "беда с масками" postmortem) ===
+        # BUG: an oversized print (e.g. pos.size well above the ~0.35 default)
+        # produced a large, washed-out DUPLICATE of the design bleeding onto
+        # the sleeve/shoulder, disconnected from the correctly-placed copy on
+        # the chest — confirmed on mockup121_package, reproduced with a real
+        # end-to-end render at size>=0.65 (fine at 0.5, bleeding at 0.65+).
+        # Root cause: self._rx/_ry above is a single smooth homography+Bezier
+        # warp fit to the TORSO print area, but shirt_mask also covers the
+        # sleeve — a physically separate fold of fabric the flat warp model
+        # was never fit to. Nothing marks the sleeve "invalid": the perspective
+        # inverse + mesh interpolation happily produces plausible-looking (but
+        # physically meaningless) source coordinates there too, so any part of
+        # the design whose placement box extends far enough eventually lands
+        # some content on the sleeve as well as the chest.
+        # FIX: independently of shirt_mask, only let the design layer render
+        # within a "trusted zone" — the print_zone rectangle (the area the
+        # package was actually calibrated for), enlarged 2x on each side and
+        # forward-warped (mesh Bezier eval + the forward perspective transform,
+        # i.e. the exact inverse of the H_inv/griddata process above) through
+        # the SAME warp to get its true canvas-space footprint. A generous 2x
+        # margin still lets legitimately oversized prints work (verified: 2x
+        # print_zone width covers the confirmed-safe size=0.5 case with room
+        # to spare) while cropping cleanly — instead of bleeding onto the
+        # sleeve — once a print is pushed far beyond what this package's warp
+        # was calibrated for. See the project todo's 2026-09-14 entry.
+        H = cv2.getPerspectiveTransform(src_corners, canvas_corners)
+        pz = self.print_zone
+        zx0, zy0 = (pz["x0"]+pz["x1"])/2, (pz["y0"]+pz["y1"])/2
+        zhw = (pz["x1"]-pz["x0"])/2 * 2.0
+        zhh = (pz["y1"]-pz["y0"])/2 * 2.0
+
+        def _forward(sx, sy):
+            u, v = sx/src_w, sy/src_h
+            bu = np.array([(1-u)**3, 3*u*(1-u)**2, 3*u**2*(1-u), u**3])
+            bv = np.array([(1-v)**3, 3*v*(1-v)**2, 3*v**2*(1-v), v**3])
+            px, py = bv@mx@bu, bv@my@bu
+            cp = H@np.array([px, py, 1.0])
+            return cp[0]/cp[2], cp[1]/cp[2]
+
+        _N2 = 24
+        boundary = []
+        for t in np.linspace(0, 1, _N2):
+            boundary.append(_forward(zx0-zhw+2*zhw*t, zy0-zhh))
+            boundary.append(_forward(zx0-zhw+2*zhw*t, zy0+zhh))
+            boundary.append(_forward(zx0-zhw, zy0-zhh+2*zhh*t))
+            boundary.append(_forward(zx0+zhw, zy0-zhh+2*zhh*t))
+        boundary = np.array(boundary, dtype=np.float32)
+        hull = cv2.convexHull(boundary)
+        trusted = np.zeros((ch, cw), dtype=np.uint8)
+        cv2.fillConvexPoly(trusted, hull.astype(np.int32), 255)
+        # Feather the edge so oversized prints fade out softly at the trusted
+        # boundary instead of a hard crop line, matching the rest of the
+        # pipeline's soft-edged masks.
+        trusted = cv2.GaussianBlur(trusted, (0, 0), sigmaX=15)
+        self._trusted_mask = trusted.astype(np.float32)/255
         print(f"Ready. Canvas: {cw}x{ch}")
 
     def _apply_displace(self, rgba):
@@ -380,8 +445,10 @@ class MockupEngine:
         warped = np.zeros((self.canvas_h,self.canvas_w,4),dtype=np.float32)
         vi = np.where(valid)[0]; fi = self._ridx[vi]
         warped[fi//self.canvas_w,fi%self.canvas_w] = design_arr[ny[valid].astype(int),nx[valid].astype(int)]
-        # Clip to shirt mask
-        warped[:,:,3] = warped[:,:,3] * self.shirt_mask
+        # Clip to shirt mask, AND to the "trusted zone" around print_zone —
+        # see its computation in __init__ for why: shirt_mask alone doesn't
+        # stop an oversized print from bleeding a duplicate onto the sleeve.
+        warped[:,:,3] = warped[:,:,3] * self.shirt_mask * self._trusted_mask
 
         # Fabric-texture displacement (Photoshop Displace filter equivalent)
         if self.displace:
