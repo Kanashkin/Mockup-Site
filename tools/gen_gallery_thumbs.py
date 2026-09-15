@@ -29,13 +29,43 @@ photos, no alpha channel to preserve (matches the reasoning already used for
 OG/Twitter share image and for `sitemap`/social-card purposes, where full
 resolution actually matters.
 
+BUG 2 (2026-09-15, "у тебя там люди не по центру"): many of the 11.09-batch
+vendor reference photos are landscape (920x613, ratio 1.5) but the gallery
+tile is portrait (460:690, ratio 0.667). Cropping the sides down to width
+`h * TARGET_RATIO` and centering that window on the SOURCE's geometric
+midpoint assumes the person is dead-center in the frame — but these are
+lifestyle/product shots that often leave negative space to one side (for a
+logo/text overlay), so a blind center crop can cut the subject off-center
+or clip an arm/shoulder while showing a slab of empty background.
+FIX: detect faces (`cv2`'s bundled Haar frontal-face cascade) and center the
+crop window on the TOPMOST detected face — for a standing subject the head
+is almost always the highest point of the body, and picking "topmost" among
+multiple candidates is far more robust than picking "largest": the largest
+detected box is sometimes a false positive on a busy background (gym
+equipment, a paper flower wall) that happens to score bigger than the real,
+smaller face box, which "topmost" reliably ignores since backgrounds rarely
+sit above a standing person's own head. Falls back to the old geometric
+center when no face is found at all (e.g. sunglasses defeat the frontal
+cascade) — verified this fallback is no worse than before on a sample with
+no face (a man wearing sunglasses, mockup1015). Verified on 6 sample
+packages spanning kids/teen/man/woman sets before shipping to all 208:
+correct fixes on 2 packages that were visibly bad before (a girl pushed to
+the right of frame, a teen almost entirely cropped out except a staircase),
+no regression on the other 4 (including two false-positive-prone
+backgrounds that "topmost" correctly ignored in favor of the real face).
+
 Usage: python3 tools/gen_gallery_thumbs.py [--force] <package_dir> [<package_dir> ...]
        python3 tools/gen_gallery_thumbs.py --force --all   # every mockup*_package dir here
 """
 import os
 import sys
 import glob
+import cv2
 from PIL import Image, ImageFile
+
+_FACE_CASCADE = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
 
 # mockup99_package/shirt_preview_color.png is a pre-existing corrupt source
 # file on disk (truncated PNG data stream, unrelated to this script) that is
@@ -73,15 +103,41 @@ def thumb_name(src_name):
     return base + "_thumb.jpg"
 
 
+def _detect_face_center_x(src_path):
+    """Return the x-center of the TOPMOST detected face, or None if no face
+    is found. Topmost (smallest y), not largest, since a standing subject's
+    head is reliably the highest point of the body, while the largest box
+    among several candidates is sometimes a false positive on a busy
+    background that happens to score bigger than the real, smaller face."""
+    cv_img = cv2.imread(src_path)
+    if cv_img is None:
+        return None
+    gray = cv2.equalizeHist(cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY))
+    faces = _FACE_CASCADE.detectMultiScale(
+        gray, scaleFactor=1.05, minNeighbors=6, minSize=(50, 50)
+    )
+    if len(faces) == 0:
+        return None
+    x, y, fw, fh = min(faces, key=lambda f: f[1])
+    return x + fw / 2
+
+
 def make_thumb(src_path, dst_path):
     img = Image.open(src_path).convert("RGB")
     w, h = img.size
     src_ratio = w / h
     if src_ratio > TARGET_RATIO:
-        # Source is relatively wider than the target box: crop the sides,
-        # centered (matches CSS object-position's default horizontal center).
+        # Source is relatively wider than the target box: crop the sides.
+        # Center on the detected face when we can find one (see BUG 2 above)
+        # since these sources often aren't shot with the subject dead-center;
+        # otherwise fall back to the CSS's own default (geometric center).
         new_w = round(h * TARGET_RATIO)
-        x0 = (w - new_w) // 2
+        cx = _detect_face_center_x(src_path)
+        if cx is not None:
+            x0 = int(round(cx - new_w / 2))
+            x0 = max(0, min(w - new_w, x0))
+        else:
+            x0 = (w - new_w) // 2
         img = img.crop((x0, 0, x0 + new_w, h))
     elif src_ratio < TARGET_RATIO:
         # Source is relatively taller/narrower: crop the bottom only, keep
