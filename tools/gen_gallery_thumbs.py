@@ -54,6 +54,28 @@ the right of frame, a teen almost entirely cropped out except a staircase),
 no regression on the other 4 (including two false-positive-prone
 backgrounds that "topmost" correctly ignored in favor of the real face).
 
+BUG 3 (2026-09-15, "а че ты их центруешь только при наведении курсора?"): BUG
+2's "topmost, not largest" heuristic had no sanity check on a candidate's own
+size, so an implausibly huge false-positive box could still beat the real face
+in the topmost tie-break if its y happened to be equal or smaller. Concretely,
+on `mockup1007_package` (kids2 group's own representative gallery card) the
+default photo (`shirt_preview.png`) detected a real 171x171 face and a bogus
+444x444 box tied at y=62 — the tie-break happened to keep the real face — but
+the hover-color photo (`shirt_preview_color.png`, same shoot/pose, only the
+shirt recolored) detected the same real face at y=62 plus a DIFFERENT bogus
+box, 479x479 at y=48 — one pixel higher, so "topmost" picked the bogus box
+there instead. Since both source photos are the same shot, the crop should
+have come out identical for the default and hover thumbnails; instead the
+default view centered on the real face while the hover view centered on the
+bogus box (~2% of frame width off), which is exactly what read as "only
+centers on hover" — the two states genuinely used different crop centers.
+FIX: reject any candidate wider than 35% of the image width before picking
+topmost (`MAX_FACE_FRAC`) — checked across all 110 face detections in the
+11.09 batch, the largest legitimate face tops out at 28% of image width, then
+there's a clean jump straight to this one 52%-wide false positive, so 35% is
+a safe cutoff that drops only implausible boxes. Falls back to no-face-found
+(the existing geometric-center fallback) if every candidate gets filtered out.
+
 Usage: python3 tools/gen_gallery_thumbs.py [--force] <package_dir> [<package_dir> ...]
        python3 tools/gen_gallery_thumbs.py --force --all   # every mockup*_package dir here
 """
@@ -103,19 +125,52 @@ def thumb_name(src_name):
     return base + "_thumb.jpg"
 
 
+# BUG 3 (2026-09-15, "а че ты их центруешь только при наведении курсора?"): the
+# "topmost, not largest" heuristic above (BUG 2) still had no sanity check on a
+# candidate's own size, so it could pick an implausibly huge "face" box if that
+# box's y happened to tie/beat the real face's y. Concretely, on
+# mockup1007_package (the kids2 group's own representative card) the base photo
+# (shirt_preview.png) detected two candidates tied at y=62 — a real 171x171 face
+# and a bogus 444x444 box — and min()'s left-to-right tie-break happened to keep
+# the real face; the hover-color photo (shirt_preview_color.png, same shoot,
+# same pose, only the shirt recolored) detected a real 171x171 face at y=62 AND
+# a bogus 479x479 box at y=48 — one pixel higher, so "topmost" picked the bogus
+# box instead. Both source images are the same photo, so the correct crop
+# should have been identical for the default and hover thumbnails; instead the
+# default (base) view came out centered on the real face while the hover view
+# came out centered on the bogus box (~16px/920px, ~2% of frame, shifted) —
+# which is exactly what looked like "only centers on hover" from the user's
+# side, since the two states genuinely used different crop centers.
+# FIX: reject any candidate wider than `MAX_FACE_FRAC` of the image width
+# before picking "topmost" — a real face in these compositions never gets
+# anywhere near that large (checked across all 110 detections in the 11.09
+# batch: the next-largest legitimate face tops out at 28% of image width, then
+# there's a clean jump straight to this one 52%-wide false positive), so 35% is
+# a safe cutoff that keeps every real detection and drops only implausible
+# ones. If every candidate gets filtered out, fall back to no-face-found
+# (the caller's existing geometric-center fallback), same as an empty
+# `detectMultiScale` result.
+MAX_FACE_FRAC = 0.35
+
+
 def _detect_face_center_x(src_path):
-    """Return the x-center of the TOPMOST detected face, or None if no face
-    is found. Topmost (smallest y), not largest, since a standing subject's
-    head is reliably the highest point of the body, while the largest box
-    among several candidates is sometimes a false positive on a busy
-    background that happens to score bigger than the real, smaller face."""
+    """Return the x-center of the TOPMOST plausible detected face, or None if
+    no face is found. Topmost (smallest y), not largest, since a standing
+    subject's head is reliably the highest point of the body, while the
+    largest box among several candidates is sometimes a false positive on a
+    busy background that happens to score bigger than the real, smaller face
+    (see BUG 2). Candidates wider than MAX_FACE_FRAC of the image are dropped
+    before picking topmost, since an implausibly large box can otherwise still
+    win the topmost tie-break over the real, smaller face (see BUG 3)."""
     cv_img = cv2.imread(src_path)
     if cv_img is None:
         return None
+    h, w = cv_img.shape[:2]
     gray = cv2.equalizeHist(cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY))
     faces = _FACE_CASCADE.detectMultiScale(
         gray, scaleFactor=1.05, minNeighbors=6, minSize=(50, 50)
     )
+    faces = [f for f in faces if f[2] <= MAX_FACE_FRAC * w]
     if len(faces) == 0:
         return None
     x, y, fw, fh = min(faces, key=lambda f: f[1])
