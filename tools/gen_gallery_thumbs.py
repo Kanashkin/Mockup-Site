@@ -152,6 +152,55 @@ def thumb_name(src_name):
 # `detectMultiScale` result.
 MAX_FACE_FRAC = 0.35
 
+# BUG 4 (2026-09-16, "ребенка ты так и не отцентровал а самый левый чел ваще
+# исчез"): minNeighbors=6 (used since BUG 2) still let through single, isolated
+# false-positive detections that aren't oversized (so BUG 3's MAX_FACE_FRAC
+# doesn't catch them) but ARE topmost, beating the real face on y alone. Two
+# confirmed instances: `mockup105_package` (a building facade's window/cornice
+# detail detected as a 91x91 "face" at y=11, one pixel from the very top of the
+# frame, versus the real 95x95 face at y=106 — the man's face was cropped out
+# of the thumbnail entirely, only his arm remained) and `mockup1000_package`
+# (three overlapping detections for the same real face, but the topmost of the
+# three was an outlier ~87px off from where the other two agreed the face
+# actually was, shifting the crop enough to visibly push the girl off-center).
+# FIX: raise minNeighbors from 6 to 8 — this is stricter about how many
+# overlapping raw detections must agree before a box is reported at all, and
+# empirically drops exactly these two false/outlier detections while leaving
+# the real face as the sole (or correctly topmost) survivor. Checked against
+# every package in the 11.09 batch to look for the opposite failure (a real
+# face that mn=6 found correctly but mn=8 loses or replaces with something
+# worse): found one, `mockup1064_package` (a selfie with the phone raised —
+# the actual face is weak/marginal at mn=8, a hand+phone-shaped blob is a more
+# stable false positive there instead) — for that one case specifically,
+# falling back to the plain geometric-center crop (i.e. as if no face were
+# found at all) turned out to already look fine, since the subject there
+# happens to be reasonably centered in the original shot anyway. No general
+# minSize/max-size tweak separated "real but weak" from "false but stable" in
+# that one case without breaking others tested alongside it, so rather than
+# keep tuning a single global threshold indefinitely, `_MANUAL_NO_FACE`
+# below lists this one file explicitly to skip face detection and use the
+# geometric-center fallback directly. Add to this list (never invent a new
+# global parameter change) if another isolated case like this turns up.
+_MIN_NEIGHBORS = 8
+_MANUAL_NO_FACE = {
+    "mockup1064_package/shirt_preview.png",
+    "mockup1064_package/shirt_preview_color.png",
+}
+
+# Found in the same 2026-09-16 audit (not user-reported): `mockup1036_package`'s
+# hover-color photo shows a man looking off to the side (near-profile), which
+# `haarcascade_frontalface_default` doesn't reliably detect at all — it fell
+# back to geometric-center, which crops to the dumbbell rack on the left and
+# misses him entirely (confirmed: `haarcascade_profileface` DOES find him
+# correctly, at x-center ~519 of 920, stable across every minNeighbors tried).
+# The base (white-shirt) photo of the same pose already gets a correct
+# frontal-cascade detection on its own, so only the recolored hover variant
+# needed this. Rather than wire a second cascade into the main path for one
+# instance, this is a manual override like `_MANUAL_NO_FACE` above.
+_MANUAL_CENTER = {
+    "mockup1036_package/shirt_preview_color.png": 519,
+}
+
 
 def _detect_face_center_x(src_path):
     """Return the x-center of the TOPMOST plausible detected face, or None if
@@ -162,13 +211,19 @@ def _detect_face_center_x(src_path):
     (see BUG 2). Candidates wider than MAX_FACE_FRAC of the image are dropped
     before picking topmost, since an implausibly large box can otherwise still
     win the topmost tie-break over the real, smaller face (see BUG 3)."""
+    norm = src_path.replace(os.sep, "/")
+    for f, cx in _MANUAL_CENTER.items():
+        if norm == f or norm.endswith("/" + f):
+            return cx
+    if any(norm == f or norm.endswith("/" + f) for f in _MANUAL_NO_FACE):
+        return None
     cv_img = cv2.imread(src_path)
     if cv_img is None:
         return None
     h, w = cv_img.shape[:2]
     gray = cv2.equalizeHist(cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY))
     faces = _FACE_CASCADE.detectMultiScale(
-        gray, scaleFactor=1.05, minNeighbors=6, minSize=(50, 50)
+        gray, scaleFactor=1.05, minNeighbors=_MIN_NEIGHBORS, minSize=(50, 50)
     )
     faces = [f for f in faces if f[2] <= MAX_FACE_FRAC * w]
     if len(faces) == 0:
