@@ -185,6 +185,45 @@ _MIN_NEIGHBORS = 8
 _MANUAL_NO_FACE = {
     "mockup1064_package/shirt_preview.png",
     "mockup1064_package/shirt_preview_color.png",
+    # BUG 5 (2026-09-17, user: "у тебя блять страница генератор которая
+    # показывает что ты обрезал модель и вставил ее не по центру") — reported
+    # against mockup1123_package's homepage gallery card (the "8 photos" woman13
+    # group tile): a woman on a yacht dock, back turned, head down, both hands
+    # raised to her hair — no frontal face is actually visible in the shot, but
+    # the cascade still fired on a single, small, confident-looking false
+    # positive (a 115x115 box on the boat hull/reflection at the bottom-LEFT of
+    # frame, y=403). Being the only detection, "topmost" trivially picked it,
+    # centering the crop at x=119.5 of 920 — clamped to x0=0 — which shows
+    # almost nothing but boat and water and excludes the woman (who sits at
+    # roughly x=290-580) almost entirely. Same false-positive shape in both the
+    # base and color-hover variants (boxes at (62,403) and (61,404) respectively
+    # — the same background detail, not the model), so both needed the override,
+    # matching BUG 3's precedent that a mismatched pair looks like "only wrong on
+    # hover"/inconsistent even when it's really wrong on both.
+    # Prompted an audit of every OTHER landscape (920x613, the "17.09 batch")
+    # package for the same symptom — any face-detected crop clamped to the x0=0
+    # or x0=(w-new_w) edge, which is what a real subject positioned at the
+    # extreme edge OR a bogus edge-of-frame detection both produce, so each hit
+    # needs a visual check to tell those apart. Found 7 more, all genuinely bogus
+    # (a wall/skateboard/gym-rig/light-bulb-string/steps false positive, real
+    # subject actually roughly centered) — visually confirmed the plain
+    # geometric-center fallback looks correct for all 8 before adding them here:
+    "mockup1123_package/shirt_preview.png",
+    "mockup1123_package/shirt_preview_color.png",
+    "mockup1016_package/shirt_preview.png",
+    "mockup1016_package/shirt_preview_color.png",
+    "mockup1017_package/shirt_preview.png",
+    "mockup1017_package/shirt_preview_color.png",
+    "mockup1023_package/shirt_preview.png",
+    "mockup1023_package/shirt_preview_color.png",
+    "mockup1035_package/shirt_preview.png",
+    "mockup1035_package/shirt_preview_color.png",
+    "mockup1042_package/shirt_preview.png",
+    "mockup1042_package/shirt_preview_color.png",
+    "mockup1044_package/shirt_preview.png",
+    "mockup1044_package/shirt_preview_color.png",
+    "mockup1077_package/shirt_preview.png",
+    "mockup1077_package/shirt_preview_color.png",
 }
 
 # Found in the same 2026-09-16 audit (not user-reported): `mockup1036_package`'s
