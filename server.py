@@ -160,25 +160,39 @@ def _clip_color(c):
 CORRUPT_BASE_PACKAGES = {f"mockup{n}_package" for n in range(37, 68)}
 
 
-def recolor_garment(base_rgb, target_rgb):
-    """Photoshop 'Color' blend mode: takes target_rgb's hue+saturation but
-    keeps base_rgb's own per-pixel luminosity — i.e. the ACTUAL photographed
-    garment's real highlights/shadows/fabric shading survive at any target
-    color. base_rgb is (H,W,3) float 0..1 (the real photographed T-shirt
-    pixels, already sitting in shirt_base.png); target_rgb is a flat (3,)
-    float 0..1 color.
+def recolor_garment(base_rgb, target_rgb, base_mean_lum):
+    """Recolors the garment using the REAL photographed shading as a
+    RELATIVE perturbation around the target color's own brightness, not an
+    absolute substitution. base_rgb is (H,W,3) float 0..1 (the real
+    photographed T-shirt pixels, already sitting in shirt_base.png);
+    target_rgb is a flat (3,) float 0..1 color; base_mean_lum is the mean
+    luminosity of base_rgb over the shirt region (MockupEngine.base_mean_lum
+    — a single scalar per package, not per-pixel).
 
-    This replaces a plain flat-color overwrite, which discarded the real
-    photo's shading entirely and left the Light/Shadow overlay layers (most
-    of them Hard Light/Screen/Overlay — see mockup-site-todo.md) to
-    reconstruct it from scratch. Those blend modes are literal no-ops (or
-    highlight-erasing) against a pure white base, which is exactly why every
-    mockup defaulted to a flat, washed-out white shirt. For an achromatic
-    target (white, gray, black — saturation 0) this reduces to the base's own
-    luminosity in grayscale, i.e. it reproduces the real photo exactly."""
+    d = base_lum - base_mean_lum is how much each pixel's real luminosity
+    deviates from that photo's own average (positive in a highlight,
+    negative in a shadow/fold). Adding d directly to target_rgb keeps the
+    target's OWN overall brightness (a "black" stays dark, a "navy" stays
+    navy) while still letting the real photographed highlights/shadows/folds
+    show through as natural-looking local variation. _clip_color() pulls any
+    resulting out-of-gamut channel back into 0..1 while preserving hue.
+
+    NOTE — this replaced an earlier version of this function that used
+    Photoshop's literal "Color" blend mode (SetLum(target, base_lum), i.e.
+    d = base_lum - target_lum instead of base_lum - base_mean_lum). That is
+    mathematically what Photoshop's Color blend mode does, but it forces
+    EVERY target color's luminosity to match the base photo's absolute
+    brightness — so a photo of a shirt lit reasonably bright (a typical
+    studio white-tee shoot averages high) rendered "black" or "navy" as a
+    washed-out pale gray/blue instead of a dark garment, and desaturated
+    vivid colors (red) toward pink. Confirmed via a direct old-vs-new render
+    comparison across white/red/navy/black/mustard on mockup1_package before
+    this got shipped. Original bug was specific to WHITE (the site's
+    default) going flat against Hard Light/Screen overlays — see
+    mockup-site-todo.md — not a reason to replace the recolor for every
+    OTHER color too, which is what the SetLum version had done."""
     base_lum = _lum(base_rgb)
-    target_lum = 0.3*target_rgb[0] + 0.59*target_rgb[1] + 0.11*target_rgb[2]
-    d = (base_lum - target_lum)[..., None]
+    d = (base_lum - base_mean_lum)[..., None]
     c = np.asarray(target_rgb, dtype=np.float32)[None, None, :] + d
     return _clip_color(c)
 
@@ -287,6 +301,14 @@ class MockupEngine:
         # T-Shirt group mask (shirt silhouette)
         self.shirt_mask = np.array(Image.open(os.path.join(mockup_dir,"shirt_full_mask.png")).convert("L")).astype(np.float32)/255
         self.shirt_mask_3d = self.shirt_mask[:,:,np.newaxis]
+
+        # Mean luminosity of the REAL photographed garment, over the shirt
+        # region only — the neutral point recolor_garment() shifts a target
+        # color's own luminosity around (see that function's docstring for
+        # why this must be a MEAN, not the raw per-pixel luminosity).
+        _base_lum_full = _lum(self.bg_u8[:, :, :3].astype(np.float32) / 255)
+        _mask_bool = self.shirt_mask > 0.5
+        self.base_mean_lum = float(_base_lum_full[_mask_bool].mean()) if _mask_bool.any() else 0.5
 
         # Shirt color (white by default = 255,255,255)
         self.shirt_color = np.array([1.0, 1.0, 1.0])
@@ -526,7 +548,7 @@ class MockupEngine:
             recolored = np.empty_like(result[:,:,:3])
             recolored[:,:,0] = r; recolored[:,:,1] = g; recolored[:,:,2] = b
         else:
-            recolored = recolor_garment(result[:,:,:3], np.array([r,g,b]))
+            recolored = recolor_garment(result[:,:,:3], np.array([r,g,b]), self.base_mean_lum)
         result[:,:,:3] = result[:,:,:3]*(1-m) + recolored*m
         result[:,:,3] = np.maximum(result[:,:,3], self.shirt_mask)
 
