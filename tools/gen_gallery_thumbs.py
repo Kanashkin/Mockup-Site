@@ -199,6 +199,28 @@ _MANUAL_NO_FACE = {
 # instance, this is a manual override like `_MANUAL_NO_FACE` above.
 _MANUAL_CENTER = {
     "mockup1036_package/shirt_preview_color.png": 519,
+    # Found in the 2026-09-17 full-audit of the 17.09 import batch (74 new
+    # packages, all landscape 920x613 vendor reference photos — same
+    # face-centering exposure as every prior landscape batch). In each case
+    # below, `haarcascade_frontalface_default` fires on a busy/textured
+    # background (a mottled wall, a window-side pedestrian, a wood-grain
+    # pillar) at a smaller y than the real face, so "topmost" — otherwise the
+    # right call, see BUG 2/3 above — picks the false positive instead. No
+    # single global parameter separated these from the many correctly-handled
+    # landscape photos in the same batch, so per BUG 4's precedent these are
+    # explicit overrides rather than another global tune. Same crop for both
+    # variants in each pair since both are the same photo/pose, just a
+    # different shirt color.
+    "mockup1083_package/shirt_preview.png": 620,
+    "mockup1083_package/shirt_preview_color.png": 620,
+    "mockup1106_package/shirt_preview.png": 455,
+    "mockup1106_package/shirt_preview_color.png": 455,
+    "mockup1115_package/shirt_preview.png": 531,
+    "mockup1115_package/shirt_preview_color.png": 531,
+    "mockup1142_package/shirt_preview.png": 440,
+    "mockup1142_package/shirt_preview_color.png": 440,
+    "mockup1143_package/shirt_preview.png": 485,
+    "mockup1143_package/shirt_preview_color.png": 485,
 }
 
 

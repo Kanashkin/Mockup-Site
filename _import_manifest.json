@@ -1,0 +1,1630 @@
+[
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 437,
+      "y0": 767,
+      "x1": 818,
+      "y1": 1388
+    },
+    "src": [
+      1251.0,
+      1915.0
+    ],
+    "package": "mockup1074_package",
+    "set": "set1",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 548,
+      "y0": 871,
+      "x1": 959,
+      "y1": 1541
+    },
+    "src": [
+      1313.0,
+      1807.0
+    ],
+    "package": "mockup1075_package",
+    "set": "set1",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 196,
+      "y0": 701,
+      "x1": 693,
+      "y1": 1509
+    },
+    "src": [
+      1302.0,
+      1852.0
+    ],
+    "package": "mockup1076_package",
+    "set": "set1",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 270,
+      "y0": 688,
+      "x1": 702,
+      "y1": 1389
+    },
+    "src": [
+      1093.0,
+      1605.0
+    ],
+    "package": "mockup1077_package",
+    "set": "set1",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 592,
+      "y0": 623,
+      "x1": 1178,
+      "y1": 1576
+    },
+    "src": [
+      1764.0,
+      2195.0
+    ],
+    "package": "mockup1088_package",
+    "set": "set2",
+    "src_num": 11,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 634,
+      "y0": 485,
+      "x1": 1249,
+      "y1": 1485
+    },
+    "src": [
+      1877.0,
+      2151.0
+    ],
+    "package": "mockup1078_package",
+    "set": "set2",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      2000,
+      3000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 493,
+      "y0": 445,
+      "x1": 925,
+      "y1": 1147
+    },
+    "src": [
+      1413.0,
+      1590.0
+    ],
+    "package": "mockup1079_package",
+    "set": "set2",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 580,
+      "y0": 443,
+      "x1": 1067,
+      "y1": 1235
+    },
+    "src": [
+      1642.0,
+      1676.0
+    ],
+    "package": "mockup1080_package",
+    "set": "set2",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 547,
+      "y0": 582,
+      "x1": 1135,
+      "y1": 1537
+    },
+    "src": [
+      1676.0,
+      2116.0
+    ],
+    "package": "mockup1081_package",
+    "set": "set2",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 568,
+      "y0": 549,
+      "x1": 1156,
+      "y1": 1504
+    },
+    "src": [
+      1719.0,
+      2049.0
+    ],
+    "package": "mockup1082_package",
+    "set": "set2",
+    "src_num": 5,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 412,
+      "y0": 426,
+      "x1": 838,
+      "y1": 1119
+    },
+    "src": [
+      1245.0,
+      1543.0
+    ],
+    "package": "mockup1083_package",
+    "set": "set2",
+    "src_num": 6,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 374,
+      "y0": 369,
+      "x1": 728,
+      "y1": 943
+    },
+    "src": [
+      1098.0,
+      1225.0
+    ],
+    "package": "mockup1084_package",
+    "set": "set2",
+    "src_num": 7,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 663,
+      "y0": 623,
+      "x1": 1331,
+      "y1": 1707
+    },
+    "src": [
+      1987.0,
+      2390.0
+    ],
+    "package": "mockup1085_package",
+    "set": "set2",
+    "src_num": 8,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 571,
+      "y0": 634,
+      "x1": 1191,
+      "y1": 1642
+    },
+    "src": [
+      1756.0,
+      2272.0
+    ],
+    "package": "mockup1086_package",
+    "set": "set2",
+    "src_num": 9,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 636,
+      "y0": 587,
+      "x1": 1447,
+      "y1": 1905
+    },
+    "src": [
+      2075.0,
+      2487.0
+    ],
+    "package": "mockup1087_package",
+    "set": "set2",
+    "src_num": 10,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": false,
+    "print_zone": {
+      "x0": 351,
+      "y0": 547,
+      "x1": 748,
+      "y1": 1192
+    },
+    "src": [
+      1245.0,
+      1665.0
+    ],
+    "package": "mockup1089_package",
+    "set": "set3",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 364,
+      "y0": 546,
+      "x1": 745,
+      "y1": 1167
+    },
+    "src": [
+      1238.0,
+      1722.0
+    ],
+    "package": "mockup1090_package",
+    "set": "set3",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 262,
+      "y0": 432,
+      "x1": 666,
+      "y1": 1089
+    },
+    "src": [
+      1146.0,
+      1468.0
+    ],
+    "package": "mockup1091_package",
+    "set": "set3",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 392,
+      "y0": 534,
+      "x1": 848,
+      "y1": 1276
+    },
+    "src": [
+      1332.0,
+      1776.0
+    ],
+    "package": "mockup1092_package",
+    "set": "set3",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 395,
+      "y0": 543,
+      "x1": 841,
+      "y1": 1269
+    },
+    "src": [
+      1259.0,
+      1772.0
+    ],
+    "package": "mockup1093_package",
+    "set": "set3",
+    "src_num": 5,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 486,
+      "y0": 518,
+      "x1": 1007,
+      "y1": 1365
+    },
+    "src": [
+      1416.0,
+      1881.0
+    ],
+    "package": "mockup1094_package",
+    "set": "set3",
+    "src_num": 6,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 467,
+      "y0": 506,
+      "x1": 936,
+      "y1": 1268
+    },
+    "src": [
+      1402.0,
+      1771.0
+    ],
+    "package": "mockup1095_package",
+    "set": "set3",
+    "src_num": 7,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 421,
+      "y0": 417,
+      "x1": 841,
+      "y1": 1101
+    },
+    "src": [
+      1099.0,
+      1516.0
+    ],
+    "package": "mockup1096_package",
+    "set": "set3",
+    "src_num": 8,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 481,
+      "y0": 465,
+      "x1": 906,
+      "y1": 1156
+    },
+    "src": [
+      1201.0,
+      1581.0
+    ],
+    "package": "mockup1097_package",
+    "set": "set3",
+    "src_num": 9,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 491,
+      "y0": 506,
+      "x1": 941,
+      "y1": 1238
+    },
+    "src": [
+      1207.0,
+      1676.0
+    ],
+    "package": "mockup1098_package",
+    "set": "set3",
+    "src_num": 10,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": false,
+    "print_zone": {
+      "x0": 434,
+      "y0": 601,
+      "x1": 993,
+      "y1": 1510
+    },
+    "src": [
+      1522.0,
+      2106.0
+    ],
+    "package": "mockup1099_package",
+    "set": "set3",
+    "src_num": 11,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": false,
+    "print_zone": {
+      "x0": 446,
+      "y0": 658,
+      "x1": 993,
+      "y1": 1546
+    },
+    "src": [
+      1539.0,
+      2069.0
+    ],
+    "package": "mockup1100_package",
+    "set": "set3",
+    "src_num": 12,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 505,
+      "y0": 632,
+      "x1": 1063,
+      "y1": 1540
+    },
+    "src": [
+      1562.0,
+      2067.0
+    ],
+    "package": "mockup1101_package",
+    "set": "set3",
+    "src_num": 13,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 442,
+      "y0": 651,
+      "x1": 917,
+      "y1": 1423
+    },
+    "src": [
+      1425.0,
+      1933.0
+    ],
+    "package": "mockup1102_package",
+    "set": "set3",
+    "src_num": 14,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 511,
+      "y0": 600,
+      "x1": 938,
+      "y1": 1296
+    },
+    "src": [
+      1319.0,
+      1743.0
+    ],
+    "package": "mockup1103_package",
+    "set": "set3",
+    "src_num": 15,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 376,
+      "y0": 426,
+      "x1": 791,
+      "y1": 1101
+    },
+    "src": [
+      1149.0,
+      1434.0
+    ],
+    "package": "mockup1104_package",
+    "set": "set3",
+    "src_num": 16,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 468,
+      "y0": 471,
+      "x1": 845,
+      "y1": 1085
+    },
+    "src": [
+      1210.0,
+      1458.0
+    ],
+    "package": "mockup1105_package",
+    "set": "set3",
+    "src_num": 17,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 390,
+      "y0": 550,
+      "x1": 785,
+      "y1": 1193
+    },
+    "src": [
+      1327.0,
+      1591.0
+    ],
+    "package": "mockup1106_package",
+    "set": "set3",
+    "src_num": 18,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 429,
+      "y0": 447,
+      "x1": 844,
+      "y1": 1122
+    },
+    "src": [
+      1180.0,
+      1568.0
+    ],
+    "package": "mockup1107_package",
+    "set": "set3",
+    "src_num": 19,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 451,
+      "y0": 431,
+      "x1": 836,
+      "y1": 1058
+    },
+    "src": [
+      1107.0,
+      1549.0
+    ],
+    "package": "mockup1108_package",
+    "set": "set3",
+    "src_num": 20,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 371,
+      "y0": 518,
+      "x1": 887,
+      "y1": 1357
+    },
+    "src": [
+      1458.0,
+      1869.0
+    ],
+    "package": "mockup1109_package",
+    "set": "set4",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 544,
+      "y0": 627,
+      "x1": 1116,
+      "y1": 1556
+    },
+    "src": [
+      1769.0,
+      2052.0
+    ],
+    "package": "mockup1110_package",
+    "set": "set4",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 730,
+      "y0": 482,
+      "x1": 1321,
+      "y1": 1443
+    },
+    "src": [
+      1964.0,
+      1921.0
+    ],
+    "package": "mockup1111_package",
+    "set": "set4",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 411,
+      "y0": 396,
+      "x1": 958,
+      "y1": 1285
+    },
+    "src": [
+      1429.0,
+      1677.0
+    ],
+    "package": "mockup1112_package",
+    "set": "set4",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 475,
+      "y0": 504,
+      "x1": 1026,
+      "y1": 1399
+    },
+    "src": [
+      1603.0,
+      1900.0
+    ],
+    "package": "mockup1113_package",
+    "set": "set4",
+    "src_num": 5,
+    "ok": true
+  },
+  {
+    "canvas": [
+      2999,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 538,
+      "y0": 475,
+      "x1": 1033,
+      "y1": 1280
+    },
+    "src": [
+      1519.0,
+      1768.0
+    ],
+    "package": "mockup1114_package",
+    "set": "set4",
+    "src_num": 6,
+    "ok": true
+  },
+  {
+    "canvas": [
+      2999,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 513,
+      "y0": 458,
+      "x1": 988,
+      "y1": 1230
+    },
+    "src": [
+      1404.0,
+      1685.0
+    ],
+    "package": "mockup1115_package",
+    "set": "set4",
+    "src_num": 7,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 516,
+      "y0": 492,
+      "x1": 1003,
+      "y1": 1285
+    },
+    "src": [
+      1551.0,
+      1814.0
+    ],
+    "package": "mockup1116_package",
+    "set": "set4",
+    "src_num": 8,
+    "ok": true
+  },
+  {
+    "canvas": [
+      2999,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 754,
+      "y0": 535,
+      "x1": 1325,
+      "y1": 1463
+    },
+    "src": [
+      1666.0,
+      1994.0
+    ],
+    "package": "mockup1117_package",
+    "set": "set4",
+    "src_num": 9,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 785,
+      "y0": 663,
+      "x1": 1445,
+      "y1": 1737
+    },
+    "src": [
+      2036.0,
+      2253.0
+    ],
+    "package": "mockup1118_package",
+    "set": "set4",
+    "src_num": 10,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 511,
+      "y0": 473,
+      "x1": 1053,
+      "y1": 1353
+    },
+    "src": [
+      1523.0,
+      1824.0
+    ],
+    "package": "mockup1119_package",
+    "set": "set4",
+    "src_num": 11,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 462,
+      "y0": 574,
+      "x1": 901,
+      "y1": 1287
+    },
+    "src": [
+      1313.0,
+      1758.0
+    ],
+    "package": "mockup1120_package",
+    "set": "set4",
+    "src_num": 12,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 326,
+      "y0": 373,
+      "x1": 726,
+      "y1": 1023
+    },
+    "src": [
+      1047.0,
+      1318.0
+    ],
+    "package": "mockup1121_package",
+    "set": "set4",
+    "src_num": 13,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 441,
+      "y0": 602,
+      "x1": 1094,
+      "y1": 1663
+    },
+    "src": [
+      1483.0,
+      2028.0
+    ],
+    "package": "mockup1122_package",
+    "set": "set4",
+    "src_num": 14,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 417,
+      "y0": 788,
+      "x1": 858,
+      "y1": 1506
+    },
+    "src": [
+      1369.0,
+      1898.0
+    ],
+    "package": "mockup1123_package",
+    "set": "set5",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 338,
+      "y0": 571,
+      "x1": 665,
+      "y1": 1103
+    },
+    "src": [
+      1081.0,
+      1513.0
+    ],
+    "package": "mockup1124_package",
+    "set": "set5",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3001,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 985,
+      "y0": 919,
+      "x1": 1645,
+      "y1": 1991
+    },
+    "src": [
+      2058.0,
+      2672.0
+    ],
+    "package": "mockup1125_package",
+    "set": "set5",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 459,
+      "y0": 575,
+      "x1": 998,
+      "y1": 1450
+    },
+    "src": [
+      1624.0,
+      1970.0
+    ],
+    "package": "mockup1126_package",
+    "set": "set5",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 561,
+      "y0": 713,
+      "x1": 994,
+      "y1": 1417
+    },
+    "src": [
+      1313.0,
+      1857.0
+    ],
+    "package": "mockup1127_package",
+    "set": "set5",
+    "src_num": 5,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 508,
+      "y0": 590,
+      "x1": 1010,
+      "y1": 1406
+    },
+    "src": [
+      1513.0,
+      1993.0
+    ],
+    "package": "mockup1128_package",
+    "set": "set5",
+    "src_num": 6,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 661,
+      "y0": 829,
+      "x1": 1288,
+      "y1": 1847
+    },
+    "src": [
+      2073.0,
+      2430.0
+    ],
+    "package": "mockup1129_package",
+    "set": "set5",
+    "src_num": 7,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 509,
+      "y0": 620,
+      "x1": 902,
+      "y1": 1259
+    },
+    "src": [
+      1288.0,
+      1565.0
+    ],
+    "package": "mockup1130_package",
+    "set": "set5",
+    "src_num": 8,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 531,
+      "y0": 695,
+      "x1": 974,
+      "y1": 1417
+    },
+    "src": [
+      1488.0,
+      2025.0
+    ],
+    "package": "mockup1131_package",
+    "set": "set6",
+    "src_num": 1,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3001,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 451,
+      "y0": 608,
+      "x1": 920,
+      "y1": 1369
+    },
+    "src": [
+      1292.0,
+      1781.0
+    ],
+    "package": "mockup1132_package",
+    "set": "set6",
+    "src_num": 2,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 457,
+      "y0": 502,
+      "x1": 951,
+      "y1": 1306
+    },
+    "src": [
+      1441.0,
+      1804.0
+    ],
+    "package": "mockup1133_package",
+    "set": "set6",
+    "src_num": 3,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 465,
+      "y0": 530,
+      "x1": 898,
+      "y1": 1234
+    },
+    "src": [
+      1286.0,
+      1602.0
+    ],
+    "package": "mockup1134_package",
+    "set": "set6",
+    "src_num": 4,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 441,
+      "y0": 622,
+      "x1": 891,
+      "y1": 1353
+    },
+    "src": [
+      1327.0,
+      1838.0
+    ],
+    "package": "mockup1135_package",
+    "set": "set6",
+    "src_num": 5,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3001,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 476,
+      "y0": 573,
+      "x1": 934,
+      "y1": 1317
+    },
+    "src": [
+      1425.0,
+      1839.0
+    ],
+    "package": "mockup1136_package",
+    "set": "set6",
+    "src_num": 6,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 658,
+      "y0": 563,
+      "x1": 1143,
+      "y1": 1352
+    },
+    "src": [
+      1709.0,
+      1913.0
+    ],
+    "package": "mockup1137_package",
+    "set": "set6",
+    "src_num": 7,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 387,
+      "y0": 652,
+      "x1": 833,
+      "y1": 1377
+    },
+    "src": [
+      1380.0,
+      1896.0
+    ],
+    "package": "mockup1138_package",
+    "set": "set6",
+    "src_num": 8,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 437,
+      "y0": 660,
+      "x1": 847,
+      "y1": 1328
+    },
+    "src": [
+      1344.0,
+      1826.0
+    ],
+    "package": "mockup1139_package",
+    "set": "set6",
+    "src_num": 9,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 408,
+      "y0": 626,
+      "x1": 782,
+      "y1": 1235
+    },
+    "src": [
+      1306.0,
+      1711.0
+    ],
+    "package": "mockup1140_package",
+    "set": "set6",
+    "src_num": 10,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 422,
+      "y0": 846,
+      "x1": 841,
+      "y1": 1528
+    },
+    "src": [
+      1337.0,
+      2056.0
+    ],
+    "package": "mockup1141_package",
+    "set": "set6",
+    "src_num": 11,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 550,
+      "y0": 637,
+      "x1": 987,
+      "y1": 1346
+    },
+    "src": [
+      1482.0,
+      1817.0
+    ],
+    "package": "mockup1142_package",
+    "set": "set6",
+    "src_num": 12,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 431,
+      "y0": 629,
+      "x1": 887,
+      "y1": 1370
+    },
+    "src": [
+      1314.0,
+      1844.0
+    ],
+    "package": "mockup1143_package",
+    "set": "set6",
+    "src_num": 13,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 477,
+      "y0": 669,
+      "x1": 976,
+      "y1": 1479
+    },
+    "src": [
+      1453.0,
+      1984.0
+    ],
+    "package": "mockup1144_package",
+    "set": "set6",
+    "src_num": 14,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 364,
+      "y0": 495,
+      "x1": 736,
+      "y1": 1100
+    },
+    "src": [
+      1091.0,
+      1517.0
+    ],
+    "package": "mockup1145_package",
+    "set": "set6",
+    "src_num": 15,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 480,
+      "y0": 523,
+      "x1": 897,
+      "y1": 1202
+    },
+    "src": [
+      1277.0,
+      1662.0
+    ],
+    "package": "mockup1146_package",
+    "set": "set6",
+    "src_num": 16,
+    "ok": true
+  },
+  {
+    "canvas": [
+      3000,
+      2000
+    ],
+    "n_overlays": 2,
+    "has_displace": true,
+    "print_zone": {
+      "x0": 347,
+      "y0": 508,
+      "x1": 712,
+      "y1": 1101
+    },
+    "src": [
+      1126.0,
+      1566.0
+    ],
+    "package": "mockup1147_package",
+    "set": "set6",
+    "src_num": 17,
+    "ok": true
+  }
+]

@@ -92,19 +92,24 @@ def convert_one(psd_path, disp_path, out_dir):
     canvas_w, canvas_h = psd.size
 
     layers = list(psd)
-    by_name = {l.name: l for l in layers}
-    tshirt = by_name.get("T-Shirt")
+    # Layer names vary slightly across template batches ("T-Shirt" in
+    # 07.09/11.09, plain "Shirt" in 17.09, occasionally with stray
+    # trailing/leading whitespace from manual PSD editing) — match on the
+    # stripped name and accept either spelling.
+    by_name = {l.name.strip(): l for l in layers}
+    tshirt = by_name.get("T-Shirt") or by_name.get("Shirt")
     bg = by_name.get("Background")
     dont_touch = by_name.get("Don't Touch")
     smart = None
     shading = []
+    skip_ids = {id(x) for x in (bg, dont_touch, tshirt) if x is not None}
     for l in layers:
         if l.kind == "smartobject":
             smart = l
-        elif l.name in ("Background", "Don't Touch", "T-Shirt"):
+        elif id(l) in skip_ids:
             continue
         elif l.kind == "solidcolorfill":
-            continue  # "Change T-Shirt Color" — engine fills this itself
+            continue  # "Change T-Shirt/Shirt Color" — engine fills this itself
         elif l.kind == "pixel":
             shading.append(l)
 
