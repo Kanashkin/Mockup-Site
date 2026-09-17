@@ -1537,19 +1537,52 @@ function quadPointAt(px,py){
 
 // ── Draw ──────────────────────────────────────────────────────────────────
 function hexToRgb(hex){return[parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255];}
+
+// mockup37_package..mockup67_package ("woman2" group) have a corrupted
+// shirt_base.png — a test print got baked permanently into the real photo
+// at some point. See CORRUPT_BASE_PACKAGES in server.py for the full story;
+// this set must stay in sync with that one.
+const CORRUPT_BASE_PACKAGES=new Set(Array.from({length:31},(_,i)=>`mockup${37+i}_package`));
+
+// Photoshop "Color" blend: keeps the base pixel's own real luminosity, takes
+// hue+saturation from the target color. Mirrors server.py's recolor_garment()/
+// _clip_color() — see that docstring for why this replaced a flat fill (it
+// erased the shirt's real photographed shading, and Light/Shadow overlays,
+// mostly Hard Light/Screen, are literal no-ops or highlight-erasing against a
+// pure-white flat base, which is exactly why every mockup defaulted to a
+// flat, washed-out white shirt).
+function clipColor(r,g,b,l){
+  const n=Math.min(r,g,b);
+  if(n<0){const k=n===l?0:l/(l-n);r=l+(r-l)*k;g=l+(g-l)*k;b=l+(b-l)*k;}
+  const x=Math.max(r,g,b);
+  if(x>1){const k=x===l?0:(1-l)/(x-l);r=l+(r-l)*k;g=l+(g-l)*k;b=l+(b-l)*k;}
+  return[r,g,b];
+}
+function recolorPixel(rB,gB,bB,tr,tg,tb){
+  const lumB=0.3*rB+0.59*gB+0.11*bB, lumT=0.3*tr+0.59*tg+0.11*tb, d=lumB-lumT;
+  return clipColor(tr+d,tg+d,tb+d,lumB);
+}
+
 function drawPreview(){
   ctx.clearRect(0,0,CW,CH);
   if(!basePixels||!maskPixels)return;
   const[tr,tg,tb]=hexToRgb(shirtColor);
+  const useFlatFill=CORRUPT_BASE_PACKAGES.has(loadedMockup);
 
-  // Step 1+2 (mirrors server.py): background photo, flat color fill clipped by shirt mask
+  // Step 1+2 (mirrors server.py): background photo, then a Color-blend
+  // recolor clipped by the shirt mask (flat fill only for the corrupted
+  // batch above — see recolorPixel()/CORRUPT_BASE_PACKAGES).
   const out=new Uint8ClampedArray(CW*CH*4);
   for(let i=0;i<CW*CH;i++){
     const s=i*4;
     const m=maskPixels[i];
-    out[s]  =Math.round((basePixels[s]/255  *(1-m)+tr*m)*255);
-    out[s+1]=Math.round((basePixels[s+1]/255*(1-m)+tg*m)*255);
-    out[s+2]=Math.round((basePixels[s+2]/255*(1-m)+tb*m)*255);
+    const rB=basePixels[s]/255, gB=basePixels[s+1]/255, bB=basePixels[s+2]/255;
+    let cr,cg,cb;
+    if(useFlatFill){cr=tr;cg=tg;cb=tb;}
+    else{[cr,cg,cb]=recolorPixel(rB,gB,bB,tr,tg,tb);}
+    out[s]  =Math.round((rB*(1-m)+cr*m)*255);
+    out[s+1]=Math.round((gB*(1-m)+cg*m)*255);
+    out[s+2]=Math.round((bB*(1-m)+cb*m)*255);
     out[s+3]=255;
   }
   ctx.putImageData(new ImageData(out,CW,CH),0,0);

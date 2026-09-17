@@ -120,6 +120,69 @@ BLEND_FNS = {
 }
 
 
+def _lum(c):
+    """Photoshop/PDF-spec non-photometric luminosity used by the Color/Hue/
+    Saturation/Luminosity blend modes. `c` is a (...,3) float array in 0..1."""
+    return 0.3*c[..., 0] + 0.59*c[..., 1] + 0.11*c[..., 2]
+
+
+def _clip_color(c):
+    """PDF-spec ClipColor: pulls an out-of-gamut RGB (from _set_lum) back into
+    0..1 while preserving its luminosity exactly."""
+    l = _lum(c)
+    n = c.min(axis=-1)
+    x = c.max(axis=-1)
+    l3 = l[..., None]
+    lo_scale = np.where(l - n > 1e-6, l / np.maximum(l - n, 1e-6), 0.0)[..., None]
+    c = np.where((n < 0)[..., None], l3 + (c - l3) * lo_scale, c)
+    l2 = _lum(c)
+    x2 = c.max(axis=-1)
+    l2_3 = l2[..., None]
+    hi_scale = np.where(x2 - l2 > 1e-6, (1 - l2) / np.maximum(x2 - l2, 1e-6), 0.0)[..., None]
+    c = np.where((x2 > 1)[..., None], l2_3 + (c - l2_3) * hi_scale, c)
+    return np.clip(c, 0, 1)
+
+
+# mockup37_package..mockup67_package (all "woman2" group) have a corrupted
+# shirt_base.png: at some point a test render (using demo_design.png — the
+# same fingerprint/"PLACE YOUR LOGO" placeholder used for manual QA) got
+# saved back over the real photographed base for this entire batch, baking
+# that graphic permanently into the garment pixels. This was invisible in
+# every render until now because the OLD flat-color-fill Step 2 (see
+# render() below) overwrote the whole shirt region anyway, coincidentally
+# hiding the corruption. recolor_garment() below correctly preserves the
+# base's real photographed shading instead of overwriting it — which would
+# also un-hide this baked-in graphic on every render for these 31 packages.
+# Until fresh source PSDs for woman2 are re-imported, these packages keep
+# the old flat-fill behavior deliberately (a flat, less realistic shirt is
+# far better than permanently showing "PLACE YOUR LOGO" under every design a
+# real customer uploads). See mockup-site-todo.md for the full writeup.
+CORRUPT_BASE_PACKAGES = {f"mockup{n}_package" for n in range(37, 68)}
+
+
+def recolor_garment(base_rgb, target_rgb):
+    """Photoshop 'Color' blend mode: takes target_rgb's hue+saturation but
+    keeps base_rgb's own per-pixel luminosity — i.e. the ACTUAL photographed
+    garment's real highlights/shadows/fabric shading survive at any target
+    color. base_rgb is (H,W,3) float 0..1 (the real photographed T-shirt
+    pixels, already sitting in shirt_base.png); target_rgb is a flat (3,)
+    float 0..1 color.
+
+    This replaces a plain flat-color overwrite, which discarded the real
+    photo's shading entirely and left the Light/Shadow overlay layers (most
+    of them Hard Light/Screen/Overlay — see mockup-site-todo.md) to
+    reconstruct it from scratch. Those blend modes are literal no-ops (or
+    highlight-erasing) against a pure white base, which is exactly why every
+    mockup defaulted to a flat, washed-out white shirt. For an achromatic
+    target (white, gray, black — saturation 0) this reduces to the base's own
+    luminosity in grayscale, i.e. it reproduces the real photo exactly."""
+    base_lum = _lum(base_rgb)
+    target_lum = 0.3*target_rgb[0] + 0.59*target_rgb[1] + 0.11*target_rgb[2]
+    d = (base_lum - target_lum)[..., None]
+    c = np.asarray(target_rgb, dtype=np.float32)[None, None, :] + d
+    return _clip_color(c)
+
+
 def _warp_triangle_into(dst_arr, src_arr, tri_src, tri_dst):
     """Affine-warp the triangular region `tri_src` of `src_arr` onto
     `tri_dst`'s location in `dst_arr` (mutated in place), masked to the
@@ -208,6 +271,7 @@ def _build_src_canvas_warp(design_img, sw, sh, mesh):
 class MockupEngine:
     def __init__(self, mockup_dir):
         print(f"Loading {mockup_dir}...")
+        self.pkg_name = os.path.basename(mockup_dir.rstrip("/"))
         with open(os.path.join(mockup_dir, "mockup.json")) as f:
             pkg = json.load(f)
 
@@ -445,16 +509,25 @@ class MockupEngine:
         # === Step 1: Background ===
         result = self.bg_u8.astype(np.float32)/255
 
-        # === Step 2: Shirt color fill (clipped to shirt mask) ===
+        # === Step 2: Shirt color recolor (clipped to shirt mask) ===
+        # Photoshop "Color" blend against the shirt's OWN real photographed
+        # pixels (already sitting in `result` from Step 1's bg_u8 composite),
+        # not a flat solid overwrite — see recolor_garment()'s docstring for
+        # why: a flat fill threw away the real fabric shading and left the
+        # Light/Shadow overlays (Step 4) to rebuild it, which silently fails
+        # (or erases highlights) against a pure-white base — the default.
         r = int(color[1:3],16)/255
         g = int(color[3:5],16)/255
         b = int(color[5:7],16)/255
-        color_arr = np.zeros_like(result)
-        color_arr[:,:,0] = r; color_arr[:,:,1] = g; color_arr[:,:,2] = b
-        color_arr[:,:,3] = 1.0
-        # Composite color fill over background, clipped by shirt mask
         m = self.shirt_mask_3d
-        result[:,:,:3] = result[:,:,:3]*(1-m) + color_arr[:,:,:3]*m
+        if self.pkg_name in CORRUPT_BASE_PACKAGES:
+            # See CORRUPT_BASE_PACKAGES above — flat fill is the deliberate,
+            # safer fallback for this specific batch until it's re-imported.
+            recolored = np.empty_like(result[:,:,:3])
+            recolored[:,:,0] = r; recolored[:,:,1] = g; recolored[:,:,2] = b
+        else:
+            recolored = recolor_garment(result[:,:,:3], np.array([r,g,b]))
+        result[:,:,:3] = result[:,:,:3]*(1-m) + recolored*m
         result[:,:,3] = np.maximum(result[:,:,3], self.shirt_mask)
 
         # === Step 3: Warp design onto shirt (clipped by shirt_mask) ===
