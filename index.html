@@ -367,6 +367,10 @@ let currentMockup='mockup3_package';
 let loadedMockup='mockup3_package';
 let shirtColor='#ffffff';
 let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=null,dispData=null;
+// "Trusted zone" mask (mirrors server.py's MockupEngine._trusted_mask, see
+// computeTrustedMask() below for why the live preview needs this too, not
+// just the final high-res render).
+let trustedPixels=null;
 // Mean luminosity of the real photographed garment over the shirt region —
 // mirrors server.py's MockupEngine.base_mean_lum, computed once per mockup
 // load in loadMockupAssets()'s finish(), not per pixel/per drawPreview call.
@@ -558,6 +562,7 @@ function loadMockupAssets(name,resetPosition){
   // squished) bug for any non-portrait mockup — see fit_size() in
   // tools/gen_editor_previews.py for the full postmortem.
   let rawBase=null,rawMask=null,newWarpMap=null,rawOverlays=[],rawDisp=null,newSrcW=0,newSrcH=0,newPrintZone=null;
+  let newWarpTransform=null,newMeshX=null,newMeshY=null;
   let pending=4; // base image, mask image, warp_data.json, mockup.json (overlays+displace resolve as one unit)
   function finish(){
     if(--pending>0)return;
@@ -581,6 +586,23 @@ function loadMockupAssets(name,resetPosition){
     const rawMaskData=tg.getImageData(0,0,CW,CH).data;
     const newMask=new Float32Array(CW*CH);
     for(let i=0;i<CW*CH;i++)newMask[i]=rawMaskData[i*4]/255;
+
+    // "Trusted zone" (mirrors server.py's MockupEngine._trusted_mask — see
+    // computeTrustedMask()'s own comment for the full story). Falls back to
+    // "no extra restriction" (all 1s, i.e. shirt_mask alone) if any of the
+    // warp data this needs is missing, so a package that's somehow lacking
+    // print_zone/mesh/transform behaves exactly as it did before this fix
+    // rather than breaking.
+    let newTrusted=null;
+    if(newPrintZone&&newWarpTransform&&newMeshX&&newMeshY&&newSrcW&&newSrcH&&newWarpMap.canvas_w&&newWarpMap.canvas_h){
+      try{
+        newTrusted=computeTrustedMask(newPrintZone,newWarpTransform,newMeshX,newMeshY,
+          newSrcW,newSrcH,newWarpMap.canvas_w,newWarpMap.canvas_h,CW,CH,newMask);
+      }catch(err){
+        console.error('computeTrustedMask failed for',name,'— falling back to shirt_mask alone',err);
+      }
+    }
+    if(!newTrusted){newTrusted=new Float32Array(CW*CH).fill(1);}
 
     // Mean luminosity of the real photo, over the shirt region only — the
     // neutral point recolorPixel() shifts a target color's own luminosity
@@ -617,7 +639,7 @@ function loadMockupAssets(name,resetPosition){
 
     const newWarped=computeWarpLookup(newWarpMap);
 
-    basePixels=newBase;maskPixels=newMask;warpedPixels=newWarped;warpMap=newWarpMap;
+    basePixels=newBase;maskPixels=newMask;trustedPixels=newTrusted;warpedPixels=newWarped;warpMap=newWarpMap;
     overlaysData=newOverlays;dispData=newDisp;SRC_W=newSrcW;SRC_H=newSrcH;
     baseMeanLum=newBaseMeanLum;
     // Recompute this mockup's own natural default (from its print zone) on
@@ -678,6 +700,13 @@ function loadMockupAssets(name,resetPosition){
 
   fetch('/'+name+'/mockup.json?v='+Date.now()).then(r=>r.json()).then(pkg=>{
     newPrintZone=pkg.print_zone||null;
+    // Needed for computeTrustedMask() below (the live-preview equivalent of
+    // server.py's "trusted zone" clip) — see that function's comment.
+    if(pkg.warp){
+      newWarpTransform=pkg.warp.transform||null;
+      newMeshX=pkg.warp.mesh_x||null;
+      newMeshY=pkg.warp.mesh_y||null;
+    }
     const list=pkg.overlays||[];
     const disp=pkg.displace;
     let subPending=list.length+(disp?1:0);
@@ -1525,6 +1554,136 @@ function applyHomography(m,x,y){
   if(Math.abs(w)<1e-12)return null;
   return{x:(m[0]*x+m[1]*y+m[2])/w,y:(m[3]*x+m[4]*y+m[5])/w};
 }
+
+// Andrew's monotone chain convex hull. Returns points in CCW order (or CW —
+// doesn't matter for the fill/stroke use below, a convex polygon can't
+// self-intersect either way). Duplicate/collinear points are fine; needs
+// >=3 distinct points to return a real polygon.
+function convexHull(pts){
+  const p=pts.slice().sort((a,b)=>a.x-b.x||a.y-b.y);
+  if(p.length<3)return p;
+  const cross=(o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+  const lower=[];
+  for(const pt of p){
+    while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],pt)<=0)lower.pop();
+    lower.push(pt);
+  }
+  const upper=[];
+  for(let i=p.length-1;i>=0;i--){
+    const pt=p[i];
+    while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],pt)<=0)upper.pop();
+    upper.push(pt);
+  }
+  upper.pop();lower.pop();
+  return lower.concat(upper);
+}
+
+// Live-preview port of server.py's MockupEngine._trusted_mask ("trusted
+// zone" — see server.py's own giant comment, "БЕДА С МАСКАМИ"/2026-09-14,
+// for the full history: an oversized print's placement box can sample
+// plausible-but-physically-meaningless source coordinates outside the area
+// this package's warp was actually calibrated for — e.g. a separate sleeve
+// fold, or in mockup77_package's case, straight past the shoulder onto the
+// studio background — and shirt_mask alone doesn't stop it, since that
+// region can still read as "shirt" in the mask).
+//
+// Found 2026-09-18: server.py got the real fix for this back on 2026-09-14
+// (fix v2 in that file's own comment — forward-warp print_zone at its own
+// true size to get its canvas footprint, grow it by a fixed MARGIN IN
+// CANVAS PIXELS via a distance-transform-equivalent, clip to shirt_mask,
+// feather the edge), but this client-side canvas preview never received the
+// same port — it was still doing exactly what server.py's fix v1 (rejected
+// the same day for being numerically unstable) and the ORIGINAL pre-fix
+// code both did: nothing beyond the raw shirt_mask clip. A user reported
+// their print visibly sticking out past the shoulder in the live editor —
+// reproducible exactly because of this gap — while their actual downloaded
+// high-res PNG (server-rendered, already protected) only showed a ~10px
+// soft edge from ordinary anti-aliasing. This function is the same fix v2
+// algorithm, adapted to run on an HTML canvas at PREVIEW resolution instead
+// of full-res numpy/cv2 arrays:
+//   1. Forward-warp print_zone's own boundary (its true 1x size, not
+//      enlarged — enlarging first and then forward-warping is exactly the
+//      unstable fix-v1 approach server.py's comment documents rejecting)
+//      through the same Bezier-mesh + perspective transform the garment
+//      warp itself uses, via evalMeshPoint()/computeHomography() (already
+//      used elsewhere in this file for the Distort/Warp tools).
+//   2. Take the convex hull of those warped points (their canvas-space
+//      footprint).
+//   3. Grow that hull by a fixed MARGIN IN (preview) CANVAS PIXELS — canvas
+//      2D's own round-joined stroke+fill of the hull path does this
+//      natively (stroking a convex polygon with lineWidth=2*margin and
+//      round joins/caps is a standard, cheap way to dilate a shape by
+//      margin px in every direction — the canvas equivalent of
+//      server.py's cv2.distanceTransform-based grow), instead of any kind
+//      of forward-warping a bigger rectangle.
+//   4. Intersect with shirt_mask (maskPixels), then feather the edge with a
+//      CSS blur filter (mirrors the Gaussian blur server.py applies).
+// margin/blur are both defined server-side in FULL canvas pixels (18% of
+// the shorter full canvas side; sigma=15), so both get scaled down by the
+// same ratio the preview canvas itself is scaled down by, to stay the same
+// PHYSICAL size relative to the photo.
+function computeTrustedMask(printZone,transform,meshXFlat,meshYFlat,srcW,srcH,fullCW,fullCH,CW,CH,maskPixels){
+  const mesh=new Array(16);
+  for(let i=0;i<16;i++)mesh[i]={u:meshXFlat[i],v:meshYFlat[i]};
+  const srcCorners=[{x:0,y:0},{x:srcW,y:0},{x:srcW,y:srcH},{x:0,y:srcH}];
+  const dstCorners=[{x:transform[0],y:transform[1]},{x:transform[2],y:transform[3]},
+                     {x:transform[4],y:transform[5]},{x:transform[6],y:transform[7]}];
+  const H=computeHomography(srcCorners,dstCorners);
+  if(!H)return null;
+  const scaleX=CW/fullCW,scaleY=CH/fullCH;
+  function forward(sx,sy){
+    const u=sx/srcW,v=sy/srcH;
+    const p=evalMeshPoint(mesh,u,v);
+    const c=applyHomography(H,p.u,p.v);
+    if(!c)return null;
+    return{x:c.x*scaleX,y:c.y*scaleY};
+  }
+  const N2=40,boundary=[];
+  const{x0,y0,x1,y1}=printZone;
+  for(let i=0;i<N2;i++){
+    const t=i/(N2-1);
+    let p;
+    if((p=forward(x0+(x1-x0)*t,y0)))boundary.push(p);
+    if((p=forward(x0+(x1-x0)*t,y1)))boundary.push(p);
+    if((p=forward(x0,y0+(y1-y0)*t)))boundary.push(p);
+    if((p=forward(x1,y0+(y1-y0)*t)))boundary.push(p);
+  }
+  if(boundary.length<3)return null;
+  const hull=convexHull(boundary);
+  if(hull.length<3)return null;
+
+  const marginFull=0.18*Math.min(fullCW,fullCH);
+  const marginPreview=marginFull*(scaleX+scaleY)/2;
+
+  const off=document.createElement('canvas');off.width=CW;off.height=CH;
+  const og=off.getContext('2d');
+  og.fillStyle='#fff';og.strokeStyle='#fff';
+  og.lineJoin='round';og.lineCap='round';
+  og.lineWidth=marginPreview*2;
+  og.beginPath();
+  og.moveTo(hull[0].x,hull[0].y);
+  for(let i=1;i<hull.length;i++)og.lineTo(hull[i].x,hull[i].y);
+  og.closePath();
+  og.fill();
+  og.stroke();
+
+  const blurPx=15*(scaleX+scaleY)/2;
+  let raw;
+  if(blurPx>0.3){
+    const off2=document.createElement('canvas');off2.width=CW;off2.height=CH;
+    const og2=off2.getContext('2d');
+    og2.filter='blur('+blurPx.toFixed(2)+'px)';
+    og2.drawImage(off,0,0);
+    raw=og2.getImageData(0,0,CW,CH).data;
+  }else{
+    raw=og.getImageData(0,0,CW,CH).data;
+  }
+
+  const trusted=new Float32Array(CW*CH);
+  for(let i=0;i<CW*CH;i++)trusted[i]=(maskPixels[i]>0.5)?(raw[i*4+3]/255):0;
+  return trusted;
+}
+
 // Direct canvas-pixel -> source-fraction lookup at the cursor, reusing the
 // same warpedPixels table (+ displacement) the main compositing loop reads
 // — this is the easy direction (unlike the per-pixel loop's target search,
@@ -1715,10 +1874,19 @@ function drawPreview(){
           if(du<0||du>=1||dv<0||dv>=1)continue;
         }
         const dx=Math.floor(du*dw),dy=Math.floor(dv*dh),di=(dy*dw+dx)*4;
-        // clip to shirt silhouette (mirrors server.py's warped[:,:,3] *= self.shirt_mask) —
-        // the warp lookup's valid region is padded wider than the actual shirt shape,
-        // so without this the design can bleed onto the background/pants.
-        const da=(dd[di+3]/255)*maskPixels[py*CW+px];if(da<0.01)continue;
+        // Clip to shirt silhouette AND the "trusted zone" around print_zone
+        // (mirrors server.py's warped[:,:,3] *= self.shirt_mask * self._trusted_mask)
+        // — the warp lookup's valid region is padded wider than the actual
+        // shirt shape, so shirt_mask alone still lets an oversized/shifted
+        // print bleed onto the background or an unrelated fold (found
+        // 2026-09-18 on mockup77_package: the LIVE PREVIEW showed a visible
+        // sliver of the print past the shoulder onto the studio background,
+        // even though the actual server-side high-res render was already
+        // protected by _trusted_mask — this canvas loop just never got that
+        // same protection ported over when server.py gained it back in the
+        // 2026-09-14 bug 6/6b fix). See computeTrustedMask() for the port.
+        const tzone=trustedPixels?trustedPixels[py*CW+px]:1;
+        const da=(dd[di+3]/255)*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
         const oi=(py*CW+px)*4;
         // Alpha-composite with the design's own true colors (mirrors
         // server.py) — not multiplied against the shirt color underneath,
