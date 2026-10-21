@@ -1877,8 +1877,15 @@ function drawPreview(){
         // same protection ported over when server.py gained it back in the
         // 2026-09-14 bug 6/6b fix). See computeTrustedMask() for the port.
         const tzone=trustedPixels?trustedPixels[py*CW+px]:1;
-        const da=(dd[di+3]/255)*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
-        designAlphaPixels[py*CW+px]=da;
+        const rawDa=dd[di+3]/255;
+        const da=rawDa*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
+        // Raw ink coverage (pre shirt-mask/trusted-zone fade), mirroring
+        // server.py's raw_design_alpha — NOT `da`, which is already faded
+        // near an oversized placement's trusted-zone edge; reusing `da`
+        // here double-fades that edge (trust fade + overlay wash both at
+        // once), showing up as a hard-looking light/dark split across the
+        // print instead of the trusted-zone's own soft feather alone.
+        designAlphaPixels[py*CW+px]=rawDa;
         const oi=(py*CW+px)*4;
         // Alpha-composite with the design's own true colors (mirrors
         // server.py) — not multiplied against the shirt color underneath,

@@ -574,6 +574,14 @@ class MockupEngine:
         warped = np.zeros((self.canvas_h,self.canvas_w,4),dtype=np.float32)
         vi = np.where(valid)[0]; fi = self._ridx[vi]
         warped[fi//self.canvas_w,fi%self.canvas_w] = design_arr[ny[valid].astype(int),nx[valid].astype(int)]
+        # Raw ink coverage — captured BEFORE the trusted-zone safety fade
+        # below — for Step 4's design_protect. See the 2026-10-21 postmortem
+        # at Step 4 for why this must stay decoupled from the trusted-zone
+        # fade, not reuse `alpha` (the postmortem below was originally
+        # written against `alpha`, which double-fades the already-fading
+        # edge of an oversized print on top of the trusted-zone's own fade,
+        # producing a hard-looking light/dark split instead of a soft one).
+        raw_design_alpha = warped[:,:,3:4].copy() / 255.0
         # Clip to shirt mask, AND to the "trusted zone" around print_zone —
         # see its computation in __init__ for why: shirt_mask alone doesn't
         # stop an oversized print from bleeding a duplicate onto the sleeve.
@@ -612,7 +620,7 @@ class MockupEngine:
         # highlight can still sheen over bare fabric exactly as before, but
         # can no longer fully wipe out printed ink. Mirrored in index.html's
         # drawPreview() Step 4 via designAlphaPixels — keep both in sync.
-        design_protect = 1.0 - 0.75 * alpha
+        design_protect = 1.0 - 0.75 * raw_design_alpha
         for img_u8,opacity,blend_mode in self.overlays:
             fn = BLEND_FNS.get(blend_mode)
             if fn:
