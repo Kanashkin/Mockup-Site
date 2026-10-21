@@ -594,12 +594,31 @@ class MockupEngine:
         result[:,:,:3] = result[:,:,:3]*(1-alpha) + design_rgb*alpha
 
         # === Step 4: Overlay layers (clipped to shirt mask) ===
+        # BUG POSTMORTEM (2026-10-21, found via "куда лого пропадает?" — a
+        # dark print going near-invisible in the high-res download on a
+        # pale shirt, while the live editor preview looked fine): HARD_LIGHT
+        # (and OVERLAY/SCREEN's bright-half) blend wherever the overlay
+        # pixel bl->1 pushes the result -> 1 REGARDLESS of what's under it
+        # (`1-2*(1-b)*(1-bl)`, b=0 -> ~1 as bl->1) — a bright fabric-highlight
+        # speck in the "Light" overlay fully erases even black ink beneath
+        # it. The live preview never showed this because it draws the same
+        # overlay PNG downscaled onto a small canvas first (tg.drawImage in
+        # index.html), and that resize smooths away exactly the sharp
+        # near-white highlight pixels that trigger the erase — this
+        # render() call uses the overlay at its real native resolution,
+        # where those highlight pixels hit full strength. Fix: dampen the
+        # overlay's influence specifically where the design print sits
+        # (`alpha`, Step 3's design coverage, already computed above) so a
+        # highlight can still sheen over bare fabric exactly as before, but
+        # can no longer fully wipe out printed ink. Mirrored in index.html's
+        # drawPreview() Step 4 via designAlphaPixels — keep both in sync.
+        design_protect = 1.0 - 0.75 * alpha
         for img_u8,opacity,blend_mode in self.overlays:
             fn = BLEND_FNS.get(blend_mode)
             if fn:
                 img = img_u8.astype(np.float32)/255
                 blended = fn(result[:,:,:3], img[:,:,:3])
-                effective = opacity * img[:,:,3:4] * self.shirt_mask_3d
+                effective = opacity * img[:,:,3:4] * self.shirt_mask_3d * design_protect
                 result[:,:,:3] = result[:,:,:3]*(1-effective) + blended*effective
 
         return Image.fromarray((np.clip(result,0,1)*255).astype(np.uint8)).convert("RGB")

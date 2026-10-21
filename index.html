@@ -408,6 +408,7 @@ let quadCorners=null; // [{u,v}x4] TL,TR,BR,BL
 let meshPoints=null;  // [{u,v}x16] row-major 4x4 (row0=top edge, row3=bottom edge)
 let quadLastEdited='corners'; // 'corners' | 'mesh' — whichever the user edited most recently
 let quadHandlePos=null; // canvas-pixel positions of the active tool's draggable points, recomputed every drawPreview()
+let designAlphaPixels=null; // per-pixel design coverage (0..1) from Step 3, reused by Step 4 — see 2026-10-21 postmortem below
 
 const canvas=document.getElementById('previewCanvas');
 const ctx=canvas.getContext('2d');
@@ -1743,6 +1744,7 @@ function recolorPixel(rB,gB,bB,tr,tg,tb,baseMean){
 function drawPreview(){
   ctx.clearRect(0,0,CW,CH);
   if(!basePixels||!maskPixels)return;
+  designAlphaPixels=null;
   const[tr,tg,tb]=hexToRgb(shirtColor);
   const useFlatFill=CORRUPT_BASE_PACKAGES.has(loadedMockup);
 
@@ -1766,6 +1768,7 @@ function drawPreview(){
 
   // Step 3: warp design onto shirt (multiply blend), same as before
   if(designImg&&warpedPixels){
+    designAlphaPixels=new Float32Array(CW*CH);
     // Pre-rotate the design (bounding-box expanded, like PIL's
     // Image.rotate(angle, expand=True)) before it enters the warp-sampling
     // loop below, rather than touching that math. Canvas ctx.rotate() is
@@ -1875,6 +1878,7 @@ function drawPreview(){
         // 2026-09-14 bug 6/6b fix). See computeTrustedMask() for the port.
         const tzone=trustedPixels?trustedPixels[py*CW+px]:1;
         const da=(dd[di+3]/255)*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
+        designAlphaPixels[py*CW+px]=da;
         const oi=(py*CW+px)*4;
         // Alpha-composite with the design's own true colors (mirrors
         // server.py) — not multiplied against the shirt color underneath,
@@ -1906,12 +1910,20 @@ function drawPreview(){
 
   // Step 4 (mirrors server.py): shading overlays (Grey/Light/Shadow/Texture), clipped by shirt mask,
   // applied on top of everything above — including the design — same as the backend.
+  // BUG POSTMORTEM (2026-10-21, "куда лого пропадает?"): HARD_LIGHT-style
+  // blends push the result toward 1 as the overlay pixel ->1 regardless of
+  // what's underneath, so a bright fabric-highlight speck in the "Light"
+  // overlay can fully erase dark print beneath it. Dampen that by the same
+  // design_protect factor server.py's render() uses, from designAlphaPixels
+  // (Step 3's design coverage) — keeps the fabric sheen effect on bare
+  // shirt untouched, just softens it over the print itself.
   if(overlaysData&&overlaysData.length){
     const sd2=ctx.getImageData(0,0,CW,CH),od2=sd2.data;
     for(let i=0;i<CW*CH;i++){
       const s=i*4;
       const m=maskPixels[i];
       if(m<=0)continue;
+      const protect=1-0.75*(designAlphaPixels?designAlphaPixels[i]:0);
       let r=od2[s]/255,g=od2[s+1]/255,b=od2[s+2]/255;
       for(let k=0;k<overlaysData.length;k++){
         const o=overlaysData[k];
@@ -1919,7 +1931,7 @@ function drawPreview(){
         const op=o.pixels;
         const or_=op[s]/255,og=op[s+1]/255,ob=op[s+2]/255,oa=op[s+3]/255;
         const br=o.blend(r,or_),bg2=o.blend(g,og),bb=o.blend(b,ob);
-        const eff=o.opacity*oa*m;
+        const eff=o.opacity*oa*m*protect;
         r=r*(1-eff)+Math.min(1,Math.max(0,br))*eff;
         g=g*(1-eff)+Math.min(1,Math.max(0,bg2))*eff;
         b=b*(1-eff)+Math.min(1,Math.max(0,bb))*eff;
