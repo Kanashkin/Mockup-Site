@@ -371,6 +371,11 @@ let basePixels=null,maskPixels=null,warpedPixels=null,warpMap=null,overlaysData=
 // computeTrustedMask() below for why the live preview needs this too, not
 // just the final high-res render).
 let trustedPixels=null;
+// Package-level warp data kept around (mirrors server.py's engine
+// attributes) so drawPreview() can rebuild a SECOND, placement-aware
+// trusted mask on every call — see its use below (2026-10-21, "лого
+// растворяется" postmortem) — not just the static print_zone one above.
+let pkgWarpTransform=null,pkgMeshX=null,pkgMeshY=null,pkgSrcW=0,pkgSrcH=0,pkgCanvasW=0,pkgCanvasH=0;
 // Mean luminosity of the real photographed garment over the shirt region —
 // mirrors server.py's MockupEngine.base_mean_lum, computed once per mockup
 // load in loadMockupAssets()'s finish(), not per pixel/per drawPreview call.
@@ -641,6 +646,8 @@ function loadMockupAssets(name,resetPosition){
     const newWarped=computeWarpLookup(newWarpMap);
 
     basePixels=newBase;maskPixels=newMask;trustedPixels=newTrusted;warpedPixels=newWarped;warpMap=newWarpMap;
+    pkgWarpTransform=newWarpTransform;pkgMeshX=newMeshX;pkgMeshY=newMeshY;
+    pkgSrcW=newSrcW;pkgSrcH=newSrcH;pkgCanvasW=newWarpMap.canvas_w||0;pkgCanvasH=newWarpMap.canvas_h||0;
     overlaysData=newOverlays;dispData=newDisp;SRC_W=newSrcW;SRC_H=newSrcH;
     baseMeanLum=newBaseMeanLum;
     // Recompute this mockup's own natural default (from its print zone) on
@@ -1769,6 +1776,45 @@ function drawPreview(){
   // Step 3: warp design onto shirt (multiply blend), same as before
   if(designImg&&warpedPixels){
     designAlphaPixels=new Float32Array(CW*CH);
+
+    // Placement-aware trusted mask (2026-10-21, "лого растворяется"
+    // postmortem — mirrors server.py's render()): trustedPixels above is
+    // static per package (built once from print_zone, at mockup-load
+    // time), so it has no idea how big THIS placement actually is. Once
+    // the user scales past print_zone + its margin, real ink outside that
+    // static zone was getting faded away even while still squarely on the
+    // torso. Forward-warp the CURRENT placement's own box (at its own
+    // size — same recipe as print_zone, just a different box) into a
+    // second trusted mask every time this draws, and take the per-pixel
+    // max with the static one — a default-sized placement is unaffected,
+    // an oversized one now gets a zone sized to its own footprint.
+    let effectiveTrustedPixels=trustedPixels;
+    if(pkgWarpTransform&&pkgMeshX&&pkgMeshY&&pkgSrcW&&pkgSrcH&&pkgCanvasW&&pkgCanvasH){
+      let box=null;
+      if(distortMode==='distort'&&quadCorners){
+        const us=quadCorners.map(c=>c.u),vs=quadCorners.map(c=>c.v);
+        box={x0:Math.min(...us)*pkgSrcW,x1:Math.max(...us)*pkgSrcW,y0:Math.min(...vs)*pkgSrcH,y1:Math.max(...vs)*pkgSrcH};
+      }else if(distortMode==='warp'&&meshPoints){
+        const us=meshPoints.map(c=>c.u),vs=meshPoints.map(c=>c.v);
+        box={x0:Math.min(...us)*pkgSrcW,x1:Math.max(...us)*pkgSrcW,y0:Math.min(...vs)*pkgSrcH,y1:Math.max(...vs)*pkgSrcH};
+      }else{
+        const half2=pos.size/2;
+        box={x0:(pos.cx-half2)*pkgSrcW,x1:(pos.cx+half2)*pkgSrcW,y0:(pos.cy-half2)*pkgSrcH,y1:(pos.cy+half2)*pkgSrcH};
+      }
+      try{
+        const designTrusted=computeTrustedMask(box,pkgWarpTransform,pkgMeshX,pkgMeshY,
+          pkgSrcW,pkgSrcH,pkgCanvasW,pkgCanvasH,CW,CH,maskPixels);
+        if(designTrusted){
+          effectiveTrustedPixels=new Float32Array(CW*CH);
+          for(let i=0;i<CW*CH;i++){
+            const a=trustedPixels?trustedPixels[i]:0, b=designTrusted[i];
+            effectiveTrustedPixels[i]=a>b?a:b;
+          }
+        }
+      }catch(err){
+        console.error('placement-aware trusted mask failed — falling back to static zone',err);
+      }
+    }
     // Pre-rotate the design (bounding-box expanded, like PIL's
     // Image.rotate(angle, expand=True)) before it enters the warp-sampling
     // loop below, rather than touching that math. Canvas ctx.rotate() is
@@ -1876,7 +1922,7 @@ function drawPreview(){
         // protected by _trusted_mask — this canvas loop just never got that
         // same protection ported over when server.py gained it back in the
         // 2026-09-14 bug 6/6b fix). See computeTrustedMask() for the port.
-        const tzone=trustedPixels?trustedPixels[py*CW+px]:1;
+        const tzone=effectiveTrustedPixels?effectiveTrustedPixels[py*CW+px]:1;
         const rawDa=dd[di+3]/255;
         const da=rawDa*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
         // Raw ink coverage (pre shirt-mask/trusted-zone fade), mirroring

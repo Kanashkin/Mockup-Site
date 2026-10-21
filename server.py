@@ -471,21 +471,44 @@ class MockupEngine:
         H = cv2.getPerspectiveTransform(src_corners, canvas_corners)
         pz = self.print_zone
 
-        def _forward(sx, sy):
-            u, v = sx/src_w, sy/src_h
-            bu = np.array([(1-u)**3, 3*u*(1-u)**2, 3*u**2*(1-u), u**3])
-            bv = np.array([(1-v)**3, 3*v*(1-v)**2, 3*v**2*(1-v), v**3])
-            px, py = bv@mx@bu, bv@my@bu
-            cp = H@np.array([px, py, 1.0])
-            return cp[0]/cp[2], cp[1]/cp[2]
+        # Stashed so render() can forward-warp the ACTUAL placed design's own
+        # box too (see _trusted_mask_for_box / the 2026-10-21 postmortem
+        # below) — not just this nominal print_zone.
+        self._fwd_H = H
+        self._mesh_mx = mx
+        self._mesh_my = my
 
+        self._trusted_mask = self._trusted_mask_for_box(pz["x0"], pz["y0"], pz["x1"], pz["y1"])
+        print(f"Ready. Canvas: {cw}x{ch}")
+
+    def _forward_point(self, sx, sy):
+        """Map one SOURCE-space point through the Bezier mesh + perspective
+        transform into canvas space — same math as __init__'s old local
+        `_forward` closure, kept as a method so render() can reuse it too."""
+        u, v = sx/self.src_w, sy/self.src_h
+        bu = np.array([(1-u)**3, 3*u*(1-u)**2, 3*u**2*(1-u), u**3])
+        bv = np.array([(1-v)**3, 3*v*(1-v)**2, 3*v**2*(1-v), v**3])
+        px, py = bv@self._mesh_mx@bu, bv@self._mesh_my@bu
+        cp = self._fwd_H@np.array([px, py, 1.0])
+        return cp[0]/cp[2], cp[1]/cp[2]
+
+    def _trusted_mask_for_box(self, x0, y0, x1, y1):
+        """Forward-warp a SOURCE-space box, AT ITS OWN SIZE, into canvas
+        space, grow it by a fixed margin (distance transform, not a re-warp
+        of an enlarged box — seethe FIX v1/v2 postmortem a few lines up for
+        why an artificially enlarged box is numerically unstable near the
+        homography's vanishing region), clip to shirt_mask, and feather.
+        Used both for this package's nominal print_zone (__init__, above)
+        and, per-render, for the design's ACTUAL placed box (see render()'s
+        2026-10-21 postmortem) — same recipe, different box."""
+        cw, ch = self.canvas_w, self.canvas_h
         _N2 = 40
         boundary = []
         for t in np.linspace(0, 1, _N2):
-            boundary.append(_forward(pz["x0"]+(pz["x1"]-pz["x0"])*t, pz["y0"]))
-            boundary.append(_forward(pz["x0"]+(pz["x1"]-pz["x0"])*t, pz["y1"]))
-            boundary.append(_forward(pz["x0"], pz["y0"]+(pz["y1"]-pz["y0"])*t))
-            boundary.append(_forward(pz["x1"], pz["y0"]+(pz["y1"]-pz["y0"])*t))
+            boundary.append(self._forward_point(x0+(x1-x0)*t, y0))
+            boundary.append(self._forward_point(x0+(x1-x0)*t, y1))
+            boundary.append(self._forward_point(x0, y0+(y1-y0)*t))
+            boundary.append(self._forward_point(x1, y0+(y1-y0)*t))
         boundary = np.array(boundary, dtype=np.float32)
         hull = cv2.convexHull(boundary)
         zone = np.zeros((ch, cw), dtype=np.uint8)
@@ -499,8 +522,7 @@ class MockupEngine:
         # boundary instead of a hard crop line, matching the rest of the
         # pipeline's soft-edged masks.
         trusted = cv2.GaussianBlur(trusted, (0, 0), sigmaX=15)
-        self._trusted_mask = trusted.astype(np.float32)/255
-        print(f"Ready. Canvas: {cw}x{ch}")
+        return trusted.astype(np.float32)/255
 
     def _apply_displace(self, rgba):
         """Photoshop Filter > Distort > Displace, 'Stretch To Fit' + 'Repeat Edge
@@ -582,10 +604,61 @@ class MockupEngine:
         # edge of an oversized print on top of the trusted-zone's own fade,
         # producing a hard-looking light/dark split instead of a soft one).
         raw_design_alpha = warped[:,:,3:4].copy() / 255.0
-        # Clip to shirt mask, AND to the "trusted zone" around print_zone —
-        # see its computation in __init__ for why: shirt_mask alone doesn't
-        # stop an oversized print from bleeding a duplicate onto the sleeve.
-        warped[:,:,3] = warped[:,:,3] * self.shirt_mask * self._trusted_mask
+
+        # === Oversized-placement clipping fix (2026-10-21, "лого
+        # растворяется" / logo dissolving into the shirt postmortem) ===
+        # self._trusted_mask (built in __init__) is STATIC per package — it
+        # only knows this package's nominal print_zone, never how big THIS
+        # particular render's design actually is. The Size slider lets a
+        # user scale the design well past print_zone (confirmed: default
+        # print_zone here covers ~24%x27% of the source canvas, but the
+        # editor allows up to 100%), and once the placement outgrows
+        # print_zone's hull + its fixed margin, real/opaque ink sitting
+        # outside that static zone was being silently erased a few lines
+        # below even though it's still squarely on the torso (shirt_mask is
+        # 1 there) — reproduced exactly on mockup17_package at size=0.50
+        # with a direct per-layer dump: raw design alpha fully opaque across
+        # the right half of the print, shirt_mask 1 there too, but the
+        # static trusted_mask had already fallen to 0, producing the
+        # diagonal "dissolve" visible in both the live preview and the
+        # high-res result (the user circled exactly this region).
+        #
+        # Fix: also forward-warp the ACTUAL placed design's own box, at ITS
+        # OWN size (same numerically-stable 1x recipe as print_zone above —
+        # see the FIX v1/v2 postmortem in __init__ for why an artificially
+        # enlarged box is unsafe), into a second trusted mask, and take the
+        # per-pixel max with the static one. A default-sized placement near
+        # print_zone is unchanged (the static mask already covers it); an
+        # oversized one now gets a zone sized to its own footprint instead
+        # of one sized for a much smaller nominal box.
+        #
+        # Tested on mockup17_package: fixes the reported dissolve at
+        # size=0.50 (full fingerprint + "PLACE YOUR LOGO" now solid); at an
+        # extreme size=1.0 the design's own box can legitimately grow to
+        # cover close to the full shirt silhouette (both sleeves included)
+        # — expected, since a print that size really does cover that much
+        # of the shirt — with no disconnected "ghost" duplicate appearing in
+        # a real render (checked side by side against the unfixed version).
+        # shirt_mask is still ANDed in either way, so background/face can
+        # never become trusted regardless of how this box forward-warps.
+        if warp_mesh is not None:
+            _pts = np.array(warp_mesh, dtype=np.float32)
+            bx0,by0 = float(_pts[:,0].min()), float(_pts[:,1].min())
+            bx1,by1 = float(_pts[:,0].max()), float(_pts[:,1].max())
+        elif distort_corners is not None:
+            _pts = np.array(distort_corners, dtype=np.float32)
+            bx0,by0 = float(_pts[:,0].min()), float(_pts[:,1].min())
+            bx1,by1 = float(_pts[:,0].max()), float(_pts[:,1].max())
+        else:
+            bx0,by0,bx1,by1 = float(x), float(y), float(x+w), float(y+h)
+        design_trusted = self._trusted_mask_for_box(bx0, by0, bx1, by1)
+        effective_trusted = np.maximum(self._trusted_mask, design_trusted)
+
+        # Clip to shirt mask, AND to the (now placement-aware) trusted zone
+        # — see its computation in __init__ for why: shirt_mask alone
+        # doesn't stop an oversized print from bleeding a duplicate onto the
+        # sleeve.
+        warped[:,:,3] = warped[:,:,3] * self.shirt_mask * effective_trusted
 
         # Fabric-texture displacement (Photoshop Displace filter equivalent)
         if self.displace:
