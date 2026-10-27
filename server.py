@@ -676,6 +676,30 @@ class MockupEngine:
         # Fabric-texture displacement (Photoshop Displace filter equivalent)
         if self.displace:
             warped = self._apply_displace(warped)
+            # === 2026-10-27: re-clip to shirt_mask after displacement ===
+            # BUG ("на сайте маски сдвинуты" — user showed a real screenshot,
+            # high-res result included, with dark print fragments spiking
+            # past the garment's left edge onto the window-blind background).
+            # Root cause, confirmed by direct pixel inspection on
+            # mockup18_package at a near-full-size placement: _apply_displace
+            # runs AFTER warped[:,:,3] was already multiplied by shirt_mask
+            # above, and displacement (h_scale=10/v_scale=10 here — up to
+            # 10px of pull in each axis) resamples the ALREADY-CLIPPED alpha
+            # channel along with RGB. A pixel exactly on the garment edge
+            # (alpha correctly 0 post-clip) can get backward-sampled from an
+            # interior, still-opaque pixel a few px away, un-clipping it —
+            # nothing re-applies shirt_mask afterward to clip the result back
+            # down. Verified: before this fix, alpha at one such background
+            # pixel went from 0.0 (correct, pre-displace) to 196.0 (bled
+            # back in, post-displace); across a representative crop this
+            # produced 4174 bled pixels, dropping to 55 (same order as the
+            # pre-existing soft-mask antialiasing noise with no design at
+            # all) once shirt_mask is reapplied here. This is unrelated to
+            # the trusted-zone removal above — it reproduces identically
+            # whether trusted-zone clipping is on or off, so it was already
+            # live in production before today, just partially masked by
+            # trusted_mask's own (over-wide) clipping in many cases.
+            warped[:,:,3] = warped[:,:,3] * self.shirt_mask
 
         # Alpha-composite the design onto the shirt with its own true colors —
         # NOT multiplied against the (possibly colored) shirt underneath, which
