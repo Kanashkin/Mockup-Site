@@ -654,11 +654,24 @@ class MockupEngine:
         design_trusted = self._trusted_mask_for_box(bx0, by0, bx1, by1)
         effective_trusted = np.maximum(self._trusted_mask, design_trusted)
 
-        # Clip to shirt mask, AND to the (now placement-aware) trusted zone
-        # — see its computation in __init__ for why: shirt_mask alone
-        # doesn't stop an oversized print from bleeding a duplicate onto the
-        # sleeve.
-        warped[:,:,3] = warped[:,:,3] * self.shirt_mask * effective_trusted
+        # === 2026-10-27: trusted-zone clipping disabled per explicit user
+        # request ===
+        # User's call, made plainly: trusted_mask kept clipping real ink on
+        # oversized placements (the 2026-10-21 fix only shrank the problem,
+        # didn't remove it — see e.g. mockup18_package at size>=0.9, a
+        # genuinely different warp-stability issue on top of this one) and
+        # the user decided the cure was worse than the disease. Clipping is
+        # now shirt_mask ONLY — the actual garment silhouette, nothing else.
+        # Known, accepted trade-off (this is exactly what trusted_mask was
+        # originally added to prevent — see __init__ and the FIX v1/v2
+        # postmortems above, now dead code but left in place in case this
+        # needs reverting): at large placement sizes a "ghost" sliver of the
+        # design can bleed onto the sleeve/background through the garment
+        # warp instead of being faded out. If that comes back and matters
+        # more than the clipping did, re-enable by restoring the line below.
+        # effective_trusted intentionally computed above and then unused —
+        # not deleting the computation so a revert is a one-line change.
+        warped[:,:,3] = warped[:,:,3] * self.shirt_mask
 
         # Fabric-texture displacement (Photoshop Displace filter equivalent)
         if self.displace:

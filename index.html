@@ -1922,7 +1922,12 @@ function drawPreview(){
         // protected by _trusted_mask — this canvas loop just never got that
         // same protection ported over when server.py gained it back in the
         // 2026-09-14 bug 6/6b fix). See computeTrustedMask() for the port.
-        const tzone=effectiveTrustedPixels?effectiveTrustedPixels[py*CW+px]:1;
+        // 2026-10-27: trusted-zone clipping disabled per explicit user
+        // request, mirrors server.py's render() — see its comment at the
+        // same date for the trade-off this accepts. tzone forced to 1
+        // (no-op) instead of ripping out effectiveTrustedPixels, so this is
+        // a one-line revert if needed.
+        const tzone=1;
         const rawDa=dd[di+3]/255;
         const da=rawDa*maskPixels[py*CW+px]*tzone;if(da<0.01)continue;
         // Raw ink coverage (pre shirt-mask/trusted-zone fade), mirroring
